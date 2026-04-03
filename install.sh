@@ -111,6 +111,37 @@ register_bins() {
   fi
 }
 
+# ── External dependencies ────────────────────────────────────────────────────
+
+OMP_REPO="anthropics/oh-my-superpowers"
+OMP_INSTALL_URL="https://raw.githubusercontent.com/${OMP_REPO}/main/install.sh"
+
+check_external_deps() {
+  echo ""
+  info "Checking external dependencies..."
+
+  # pi (coding agent) — required for LLM interaction
+  if ! command -v pi &>/dev/null; then
+    warn "pi (coding agent) not found. Install it for LLM features:"
+    info "  npm install -g @mariozechner/pi-coding-agent"
+  else
+    success "pi found: $(command -v pi)"
+  fi
+
+  # oh-my-superpowers — required for web-operator (URL ingest)
+  if ! command -v omp-web-operator &>/dev/null; then
+    info "oh-my-superpowers not found. Installing..."
+    if curl -fsSL "${OMP_INSTALL_URL}" | bash; then
+      success "oh-my-superpowers installed"
+    else
+      warn "Failed to install oh-my-superpowers. URL ingest will not work."
+      info "Manual install: curl -fsSL ${OMP_INSTALL_URL} | bash"
+    fi
+  else
+    success "omp-web-operator found: $(command -v omp-web-operator)"
+  fi
+}
+
 # ── PATH check ───────────────────────────────────────────────────────────────
 
 check_path() {
@@ -142,6 +173,7 @@ main() {
 
   register_bins
   check_path
+  check_external_deps
 
   echo ""
   success "Bootstrap complete."

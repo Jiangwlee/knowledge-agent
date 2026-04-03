@@ -566,3 +566,288 @@ knowledge-agent/
 git add CLAUDE.md
 git commit -m "docs: update CLAUDE.md for Phase 1 implementation"
 ```
+
+---
+
+## 行动计划（Phase 2：Ingest + 快速编译）
+
+### 设计决策
+
+#### Pi 集成模式
+
+基于 Pi 源码（`~/Github/pi-mono`）分析，有三种集成模式：
+
+| 模式 | 机制 | 适用场景 |
+|---|---|---|
+| Print Mode | `pi -p "prompt" --mode text/json` | 单次任务（ingest, compile, query, lint） |
+| RPC Mode | `pi --mode rpc`，stdin/stdout JSONL 双向通信 | 多轮交互（chat，Phase 3） |
+| In-Process SDK | `createAgentSession()` | 深度集成（不采用，耦合过深） |
+
+**Phase 2 采用 Print Mode**：每次 ingest/compile 是独立任务，spawn pi 进程 → 收集响应 → 进程退出。
+
+#### Pi CLI 关键参数（来自源码）
+
+```
+pi --no-session              # 不保存 session
+   --model <provider/id>     # 模型选择
+   --tools <tool1,tool2>     # 启用的工具
+   --skill <path>            # 加载 skill（可重复）
+   --system-prompt <text>    # 系统提示词
+   --append-system-prompt <text>  # 追加系统提示词
+   --thinking <level>        # off/minimal/low/medium/high/xhigh
+   -p                        # print mode（非交互）
+   --mode json               # JSON 事件流输出
+```
+
+#### 子命令 Preset 模式
+
+Pi 参数组合集中在 `src/presets.ts`，不散落在各子命令中。每个 subcommand 有默认 preset，CLI flags（`--model`、`--mode`）可覆盖。未来需要时可外化为 config.json。
+
+#### URL 提取
+
+不自己实现 URL → markdown。依赖 oh-my-superpowers 的 `omp-web-operator read-url <url>` 命令，直接输出提取后的文本。install.sh 检查并安装该依赖。
+
+#### 外部依赖
+
+| 依赖 | 用途 | 安装方式 |
+|---|---|---|
+| `pi` (coding-agent) | LLM 交互 | 全局安装 |
+| `oh-my-superpowers` | `omp-web-operator read-url` URL 提取 | install.sh 检查，缺失则 `curl ... \| bash` 安装 |
+
+### 文件结构设计
+
+| 操作 | 文件路径 | 职责 |
+|------|----------|------|
+| 重写 | `src/pi.ts` | Pi subprocess runner：spawn pi 进程，JSONL 事件解析，收集文本响应 |
+| 新增 | `src/presets.ts` | 子命令 preset 配置：skills、tools、thinking、agent 路径 |
+| 重写 | `src/commands/ingest.ts` | Ingest 实现：URL（omp-web-operator）、文本、文件→ markdown/ → 触发快速编译 |
+| 重写 | `src/commands/compile.ts` | 快速编译：markdown → Pi + librarian + compile skill → sources/ + 索引更新 |
+| 新增 | `src/pipeline/markdown.ts` | Markdown 文件管理：frontmatter 生成、文件命名、保存到 markdown/ |
+| 新增 | `src/pipeline/index-updater.ts` | 索引更新：读写 _index/master.md，保持与 sources/ 一致 |
+| 修改 | `install.sh` | 添加 oh-my-superpowers 依赖检查和自动安装 |
+| 新增 | `tests/pi.test.ts` | Pi runner 测试（mock subprocess） |
+| 新增 | `tests/presets.test.ts` | Preset 配置测试 |
+| 新增 | `tests/commands/ingest.test.ts` | Ingest 命令测试 |
+| 新增 | `tests/commands/compile.test.ts` | Quick compile 测试 |
+| 新增 | `tests/pipeline/markdown.test.ts` | Markdown 管理测试 |
+| 新增 | `tests/pipeline/index-updater.test.ts` | 索引更新测试 |
+
+### 任务步骤
+
+#### Task 0: 依赖与安装更新
+
+**Files:**
+- 修改: `install.sh`
+- 修改: `package.json`
+
+- [ ] **Step 1: 更新 install.sh**
+
+  添加 oh-my-superpowers 依赖检查：
+  - 检查 `omp-web-operator` 是否在 PATH 中
+  - 缺失时自动执行 omp 的 install.sh
+  - 检查 `pi` 是否在 PATH 中，缺失时提示安装
+
+- [ ] **Step 2: 测试两种场景**（依赖已存在 / 依赖缺失）
+
+- [ ] **Step 3: 提交**
+
+#### Task 1: src/pi.ts — Pi subprocess runner
+
+**Files:**
+- 重写: `src/pi.ts`
+- 新增: `tests/pi.test.ts`
+
+- [ ] **Step 1: 写失败测试**
+
+  - `runAgent()` 能 spawn pi 进程并收集文本响应
+  - JSON mode 能解析 JSONL 事件流，提取 text_delta
+  - Text mode 直接返回 stdout
+  - Pi 不可用时抛出清晰错误
+  - 测试通过 mock child_process.spawn
+
+- [ ] **Step 2: 运行测试确认失败**
+
+- [ ] **Step 3: 实现 src/pi.ts**
+
+  ```typescript
+  export interface RunAgentOptions {
+    prompt: string;
+    systemPrompt?: string;
+    skills?: string[];
+    tools?: string[];
+    model?: string;
+    thinking?: string;
+    mode?: 'text' | 'json';
+    cwd?: string;
+  }
+
+  export interface RunAgentResult {
+    content: string;
+  }
+
+  export async function runAgent(options: RunAgentOptions): Promise<RunAgentResult>
+  ```
+
+  关键逻辑：
+  - 构建 pi CLI 参数数组：`['--no-session', '-p', '--mode', mode, ...]`
+  - `spawn('pi', args, { stdio: ['ignore', 'pipe', 'pipe'] })`
+  - JSON mode：逐行解析 JSONL，收集 `message_update` + `text_delta` 事件
+  - Text mode：直接收集 stdout
+  - 错误处理：非零退出码 → reject with stderr
+
+- [ ] **Step 4: 运行测试确认通过**
+
+- [ ] **Step 5: 提交**
+
+#### Task 2: src/presets.ts — 子命令 preset 配置
+
+**Files:**
+- 新增: `src/presets.ts`
+- 新增: `tests/presets.test.ts`
+
+- [ ] **Step 1: 写失败测试**
+
+  - `getPreset('ingest')` 返回正确的 skills、tools、thinking
+  - `resolveRunOptions(preset, cliOverrides)` 正确合并（CLI 优先）
+  - 所有子命令（ingest/compile/query/lint/chat）均有 preset
+
+- [ ] **Step 2: 运行测试确认失败**
+
+- [ ] **Step 3: 实现 src/presets.ts**
+
+  ```typescript
+  export interface Preset {
+    skills: string[];       // 相对于项目 root 的 skill 路径
+    tools: string[];        // Pi tool 名称
+    thinking: string;       // 默认思考级别
+  }
+
+  export const PRESETS: Record<string, Preset> = {
+    ingest: {
+      skills: ['skills/ingest/SKILL.md', 'skills/compile/SKILL.md'],
+      tools: ['read', 'write', 'bash', 'grep', 'ls'],
+      thinking: 'medium',
+    },
+    compile: { ... },
+    query: { ... },
+    lint: { ... },
+    chat: { ... },
+  };
+
+  export function getPreset(command: string): Preset
+  export function resolveRunOptions(preset: Preset, overrides: { model?: string }): RunAgentOptions
+  ```
+
+- [ ] **Step 4: 运行测试确认通过**
+
+- [ ] **Step 5: 提交**
+
+#### Task 3: src/pipeline/markdown.ts — Markdown 文件管理
+
+**Files:**
+- 新增: `src/pipeline/markdown.ts`
+- 新增: `tests/pipeline/markdown.test.ts`
+
+- [ ] **Step 1: 写失败测试**
+
+  - `saveMarkdown(content, metadata)` 保存到 `markdown/` 目录，带 YAML frontmatter
+  - 文件名从 title 或 URL 生成（slugify）
+  - frontmatter 包含：title, source, date, type
+  - 文件已存在时不覆盖（返回已有路径）
+
+- [ ] **Step 2: 运行测试确认失败**
+
+- [ ] **Step 3: 实现**
+
+- [ ] **Step 4: 运行测试确认通过**
+
+- [ ] **Step 5: 提交**
+
+#### Task 4: Ingest 命令实现
+
+**Files:**
+- 重写: `src/commands/ingest.ts`
+- 新增: `tests/commands/ingest.test.ts`
+
+- [ ] **Step 1: 写失败测试**
+
+  - URL 输入：调用 `omp-web-operator read-url`，保存结果到 markdown/
+  - 文本输入（`--text` flag）：从 stdin 读取，保存到 markdown/
+  - Ingest 完成后触发快速编译
+  - omp-web-operator 不可用时报错并提示安装 oh-my-superpowers
+  - 知识库未初始化时报错并提示运行 `kb-agent init`
+
+- [ ] **Step 2: 运行测试确认失败**
+
+- [ ] **Step 3: 实现 src/commands/ingest.ts**
+
+  URL 管线：
+  ```
+  omp-web-operator read-url <url> → stdout → saveMarkdown() → quickCompile()
+  ```
+
+  文本管线：
+  ```
+  stdin → saveMarkdown() → quickCompile()
+  ```
+
+- [ ] **Step 4: 运行测试确认通过**
+
+- [ ] **Step 5: 提交**
+
+#### Task 5: Quick Compile 实现
+
+**Files:**
+- 重写: `src/commands/compile.ts`
+- 新增: `src/pipeline/index-updater.ts`
+- 新增: `tests/commands/compile.test.ts`
+- 新增: `tests/pipeline/index-updater.test.ts`
+
+- [ ] **Step 1: 写失败测试**
+
+  Quick compile:
+  - 读取 markdown 源文件 + wiki/SCHEMA.md + wiki/_index/master.md
+  - 发送给 Pi（librarian agent + compile skill）
+  - Pi 生成 sources/ 摘要（Obsidian 兼容 markdown，含 frontmatter + wikilinks）
+  - 保存到 wiki/sources/
+  - 更新 _index/master.md
+
+  Index updater:
+  - `updateMasterIndex()` 读取当前 master.md，添加新 source 条目
+  - 索引一致性验证：sources/ 中的文件与 master.md 条目匹配
+
+- [ ] **Step 2: 运行测试确认失败**
+
+- [ ] **Step 3: 实现**
+
+  Quick compile prompt 策略：
+  ```
+  你是图书管理员。以下是一篇新导入的文章。
+  请为它生成一份 wiki/sources/ 摘要。
+
+  ## 当前 Wiki 结构
+  {SCHEMA.md 内容}
+
+  ## 当前索引
+  {master.md 内容}
+
+  ## 新文章
+  {markdown 内容}
+
+  ## 任务
+  1. 生成 sources/ 摘要（Obsidian 兼容，含 frontmatter）
+  2. 输出更新后的 master.md
+  ```
+
+  输出解析：从 Pi 响应中提取 sources/ 文件内容和更新后的 master.md。
+
+- [ ] **Step 4: 运行测试确认通过**
+
+- [ ] **Step 5: 提交**
+
+#### Task 6: 完成核查
+
+- [ ] **Step 1: 运行全部测试**
+- [ ] **Step 2: 对照 spec 设计方案验证无偏差**
+- [ ] **Step 3: 更新 CLAUDE.md**
+- [ ] **Step 4: 提交**

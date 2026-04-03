@@ -11,6 +11,16 @@ import { lintCommand } from './commands/lint.js';
 import { queryCommand } from './commands/query.js';
 import { chatCommand } from './commands/chat.js';
 
+function readStdin(): Promise<string> {
+  return new Promise((resolve) => {
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => { data += chunk; });
+    process.stdin.on('end', () => { resolve(data.trim()); });
+    process.stdin.resume();
+  });
+}
+
 export interface GlobalOptions {
   model?: string;
   mode?: string;
@@ -33,11 +43,15 @@ function createProgram(): Command {
 
   program
     .command('ingest <source>')
-    .description('Import raw material (URL, file, or text)')
+    .description('Import raw material (URL or --text for stdin)')
     .option('--model <model>', 'LLM model override')
     .option('--mode <mode>', 'Pi output mode: text / stream / json / interactive', 'text')
     .action(async (source: string, opts: GlobalOptions) => {
-      await ingestCommand(source, opts);
+      let textInput: string | undefined;
+      if (source === '--text' && !process.stdin.isTTY) {
+        textInput = await readStdin();
+      }
+      await ingestCommand(source, opts, textInput);
     });
 
   program

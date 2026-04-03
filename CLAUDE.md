@@ -55,20 +55,46 @@ LLM 通用参数: --model <model>  --mode text|stream|json|interactive
 ## Tech Stack
 
 - **Language**: JavaScript/TypeScript
-- **LLM**: Pi RPC（参考 `~/Projects/minora-ui/` team lead）
-- **CLI --mode/--model**: 需工程化，参考 `~/Projects/oh-my-superpowers/bin/omp`
+- **LLM**: Pi subprocess (`pi -p --mode json`) — 参考 `~/Github/pi-mono/packages/coding-agent/`
+- **URL 提取**: `omp-web-operator read-url --json`（依赖 oh-my-superpowers）
+- **CLI**: commander
+- **Test**: vitest
+
+## Pi Integration
+
+Pi 以 subprocess 模式调用（Print Mode），`src/pi.ts` 封装了 `runAgent()` 函数。
+子命令参数组合集中在 `src/presets.ts`（PRESETS），CLI flags 可覆盖。
+
+```
+pi --no-session -p --mode json --model <model> --skill <path> --tools <list> --thinking <level> "prompt"
+```
+
+## External Dependencies
+
+- `pi` (coding-agent) — LLM 交互，`npm i -g @mariozechner/pi-coding-agent`
+- `oh-my-superpowers` — URL 提取（omp-web-operator），install.sh 自动检查安装
 
 ## Project Structure
 
 ```
 knowledge-agent/
-├── bin/kb-agent
-├── src/commands/
-├── src/pipeline/
-├── agents/librarian.md
+├── bin/kb-agent              # CLI 入口
+├── src/
+│   ├── cli.ts                # Commander 路由
+│   ├── config.ts             # 数据目录管理
+│   ├── pi.ts                 # Pi subprocess runner
+│   ├── presets.ts            # 子命令 preset 配置
+│   ├── commands/             # 子命令实现
+│   │   ├── init.ts
+│   │   ├── ingest.ts         # URL/文本导入 → markdown/ → quick compile
+│   │   └── compile.ts        # 快速编译 → sources/ + 索引更新
+│   └── pipeline/             # 管线工具
+│       ├── markdown.ts       # Markdown 文件管理（frontmatter、slugify）
+│       └── index-updater.ts  # _index/master.md 维护
+├── agents/librarian.md       # Pi agent prompt
 ├── skills/{ingest,compile,search,lint}/
+├── tests/                    # vitest 测试
 ├── docs/
-├── tests/
 └── package.json
 ```
 
