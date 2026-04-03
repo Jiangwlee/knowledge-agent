@@ -85,7 +85,7 @@ describe('ingest URL', () => {
 
     const content = readFileSync(join(testDir, 'markdown', files[0]), 'utf-8');
     expect(content).toContain('title: Test Article');
-    expect(content).toContain('source: https://example.com/test');
+    expect(content).toContain('source: "https://example.com/test"');
   });
 
   it('reports error when omp-web-operator is not available', async () => {

@@ -36,6 +36,8 @@ describe('init command', () => {
     expect(schema).toContain('sources/');
     expect(schema).toContain('concepts/');
     expect(schema).toContain('maps/');
+    expect(schema).toContain('## Candidate Shelves');
+    expect(schema).toContain('AI Agent Systems');
   });
 
   it('creates master.md index', async () => {

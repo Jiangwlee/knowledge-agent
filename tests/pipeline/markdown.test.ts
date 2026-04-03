@@ -4,7 +4,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { saveMarkdown, slugify, extractTitle } from '../../src/pipeline/markdown.js';
+import {
+  saveMarkdown,
+  slugify,
+  extractTitle,
+  parseFrontmatter,
+  serializeFrontmatter,
+  readMarkdownWithFrontmatter,
+} from '../../src/pipeline/markdown.js';
 
 let testDir: string;
 
@@ -71,7 +78,7 @@ describe('saveMarkdown', () => {
     const saved = readFileSync(result.path, 'utf-8');
     expect(saved).toContain('---');
     expect(saved).toContain('title: Test Article');
-    expect(saved).toContain('source: https://example.com/article');
+    expect(saved).toContain('source: "https://example.com/article"');
     expect(saved).toContain('# Test Article');
   });
 
@@ -125,5 +132,75 @@ describe('saveMarkdown', () => {
     const saved = readFileSync(result.path, 'utf-8');
     // Should contain an ISO date string
     expect(saved).toMatch(/date: \d{4}-\d{2}-\d{2}/);
+  });
+});
+
+describe('frontmatter helpers', () => {
+  it('parses frontmatter with arrays, booleans, and nulls', () => {
+    const parsed = parseFrontmatter(`---
+kind: source
+title: Test Article
+candidate_shelves:
+  - AI Agent Systems
+  - GitHub Projects
+recommended_shelf: null
+unassigned: true
+---
+
+# Summary
+
+Body.
+`);
+
+    expect(parsed.frontmatter.kind).toBe('source');
+    expect(parsed.frontmatter.title).toBe('Test Article');
+    expect(parsed.frontmatter.candidate_shelves).toEqual(['AI Agent Systems', 'GitHub Projects']);
+    expect(parsed.frontmatter.recommended_shelf).toBeNull();
+    expect(parsed.frontmatter.unassigned).toBe(true);
+    expect(parsed.body).toContain('# Summary');
+  });
+
+  it('serializes and reparses frontmatter without losing structure', () => {
+    const content = serializeFrontmatter(
+      {
+        kind: 'source',
+        title: 'Harness Design',
+        candidate_shelves: ['AI Agent Systems'],
+        recommended_shelf: 'AI Agent Systems',
+        unassigned: false,
+        shelf_confidence: 'high',
+      },
+      '# Summary\n\nBody.',
+    );
+
+    const reparsed = parseFrontmatter(content);
+    expect(reparsed.frontmatter).toMatchObject({
+      kind: 'source',
+      title: 'Harness Design',
+      candidate_shelves: ['AI Agent Systems'],
+      recommended_shelf: 'AI Agent Systems',
+      unassigned: false,
+      shelf_confidence: 'high',
+    });
+    expect(reparsed.body).toContain('Body.');
+  });
+
+  it('reads markdown file with frontmatter', () => {
+    const path = join(testDir, 'markdown', 'source.md');
+    writeFileSync(path, `---
+kind: source
+title: Source Doc
+candidate_shelves: []
+recommended_shelf: null
+unassigned: true
+---
+
+Body text.
+`, 'utf-8');
+
+    const parsed = readMarkdownWithFrontmatter(path);
+    expect(parsed.frontmatter.title).toBe('Source Doc');
+    expect(parsed.frontmatter.candidate_shelves).toEqual([]);
+    expect(parsed.body).toContain('Body text.');
   });
 });

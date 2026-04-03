@@ -19,6 +19,14 @@ to understand how to maintain the wiki structure.
 - **maps/** — High-level maps: topic overviews, timelines, comparisons
 - **_index/** — Navigation indexes for LLM (layered loading)
 
+## Candidate Shelves
+
+- **AI Agent Systems** — agent architecture, harnesses, workflows, tool use, evaluation loops, engineering practice
+- **LLM Models** — training, alignment, inference, reasoning, benchmarks, capabilities
+- **Trading** — stock trading, strategy, execution, market structure, risk management
+- **Design** — UI/UX, web design, interaction patterns, visual systems, frontend experience
+- **GitHub Projects** — specific project architecture, evolution, implementation choices, maintenance practice
+
 ## Rules
 
 1. Every source in markdown/ MUST have a corresponding summary in sources/
@@ -38,16 +46,34 @@ const MASTER_INDEX_INITIAL = `# Master Index
 
 > LLM entry point: read this file first to navigate the knowledge base.
 
-## Topics
+## Query Protocol
 
-_No topics yet. Run \`kb-agent ingest\` to add your first source._
+Navigation rule:
+1. Pick the most relevant bookshelf.
+2. Within that bookshelf, read the shelf page for reading order and available material.
+3. For mature shelves (with Maps/Concepts/Sources/Gaps sections), choose by question type.
+4. For young shelves (flat source list), scan the listed sources directly.
+5. If the shelf does not contain enough material, say so clearly.
 
-## Recent Sources
+## Bookshelves
 
-_Empty._
+_No active bookshelves yet. Compile more sources to activate a shelf._
 
-## Statistics
+## Cross-Cutting Views
 
+These are perspectives inside bookshelves, not top-level bookshelves:
+- Best Practices
+- Comparisons
+- Timelines
+- Open Questions
+
+## Recent Activity
+
+_No structural activity yet._
+
+## Library Status
+
+- Active bookshelves: 0
 - Sources: 0
 - Concepts: 0
 - Maps: 0
@@ -65,6 +91,7 @@ export async function initCommand(): Promise<void> {
     join(wikiDir, 'concepts'),
     join(wikiDir, 'maps'),
     join(wikiDir, '_index'),
+    join(wikiDir, '_index', 'by-topic'),
     join(wikiDir, '.obsidian'),
   ];
 

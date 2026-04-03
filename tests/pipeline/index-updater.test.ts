@@ -1,33 +1,18 @@
-// tests/pipeline/index-updater.test.ts — Index updater tests
+// tests/pipeline/index-updater.test.ts — Runtime navigation writer tests
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { updateMasterIndex } from '../../src/pipeline/index-updater.js';
+import { rebuildNavigationIndexes, updateMasterIndex } from '../../src/pipeline/index-updater.js';
 
 let testDir: string;
 let wikiDir: string;
 let masterPath: string;
 
-const INITIAL_MASTER = `# Master Index
-
-> LLM entry point: read this file first to navigate the knowledge base.
-
-## Topics
-
-_No topics yet. Run \`kb-agent ingest\` to add your first source._
-
-## Recent Sources
-
-_Empty._
-
-## Statistics
-
-- Sources: 0
-- Concepts: 0
-- Maps: 0
-`;
+function writeSource(name: string, content: string) {
+  writeFileSync(join(wikiDir, 'sources', `${name}.md`), content, 'utf-8');
+}
 
 beforeEach(() => {
   testDir = join(tmpdir(), `kb-test-index-${Date.now()}`);
@@ -36,8 +21,7 @@ beforeEach(() => {
   mkdirSync(join(wikiDir, 'sources'), { recursive: true });
   mkdirSync(join(wikiDir, 'concepts'), { recursive: true });
   mkdirSync(join(wikiDir, 'maps'), { recursive: true });
-  mkdirSync(join(wikiDir, '_index'), { recursive: true });
-  writeFileSync(masterPath, INITIAL_MASTER, 'utf-8');
+  mkdirSync(join(wikiDir, '_index', 'by-topic'), { recursive: true });
   process.env.KB_AGENT_DATA_DIR = testDir;
 });
 
@@ -46,52 +30,138 @@ afterEach(() => {
   delete process.env.KB_AGENT_DATA_DIR;
 });
 
-describe('updateMasterIndex', () => {
-  it('replaces empty placeholder with first source link', () => {
-    // Create a source file so count is accurate
-    writeFileSync(join(wikiDir, 'sources', 'test-article.md'), '# Test', 'utf-8');
+describe('rebuildNavigationIndexes', () => {
+  it('writes a master index with no active bookshelves when nothing is activated', () => {
+    writeSource('unassigned', `---
+kind: source
+title: Unassigned
+source_type: discussion
+primary_subject: mixed notes
+candidate_shelves: []
+recommended_shelf: null
+unassigned: true
+---
 
-    updateMasterIndex('test-article');
+Body.
+`);
+
+    rebuildNavigationIndexes();
 
     const content = readFileSync(masterPath, 'utf-8');
-    expect(content).toContain('[[sources/test-article]]');
-    expect(content).not.toContain('_Empty._');
+    expect(content).toContain('## Query Protocol');
+    expect(content).toContain('_No active bookshelves yet.');
+    expect(content).toContain('- Active bookshelves: 0');
     expect(content).toContain('- Sources: 1');
   });
 
-  it('adds second source without removing first', () => {
-    writeFileSync(join(wikiDir, 'sources', 'first.md'), '# First', 'utf-8');
-    updateMasterIndex('first');
+  it('lists active bookshelves in master.md when a shelf activates', () => {
+    for (const name of ['one', 'two', 'three']) {
+      writeSource(name, `---
+kind: source
+title: ${name}
+source_type: engineering_practice
+primary_subject: harness design for long-running ai agents
+candidate_shelves:
+  - AI Agent Systems
+recommended_shelf: AI Agent Systems
+unassigned: false
+---
 
-    writeFileSync(join(wikiDir, 'sources', 'second.md'), '# Second', 'utf-8');
-    updateMasterIndex('second');
+Body.
+`);
+    }
+
+    rebuildNavigationIndexes();
 
     const content = readFileSync(masterPath, 'utf-8');
-    expect(content).toContain('[[sources/first]]');
-    expect(content).toContain('[[sources/second]]');
-    expect(content).toContain('- Sources: 2');
+    expect(content).toContain('### AI Agent Systems');
+    expect(content).toContain('Sources: 3');
+    expect(content).toContain('Status: young');
+    expect(content).toContain('[[_index/by-topic/ai-agent-systems]]');
   });
 
-  it('does not duplicate existing source entry', () => {
-    writeFileSync(join(wikiDir, 'sources', 'test.md'), '# Test', 'utf-8');
-    updateMasterIndex('test');
-    updateMasterIndex('test'); // duplicate call
+  it('writes a stage1 by-topic page for active stage1 shelves', () => {
+    for (const name of ['one', 'two', 'three']) {
+      writeSource(name, `---
+kind: source
+title: ${name}
+source_type: engineering_practice
+primary_subject: harness design for long-running ai agents
+candidate_shelves:
+  - AI Agent Systems
+recommended_shelf: AI Agent Systems
+unassigned: false
+---
 
-    const content = readFileSync(masterPath, 'utf-8');
-    const matches = content.match(/\[\[sources\/test\]\]/g);
-    expect(matches).toHaveLength(1);
+Body.
+`);
+    }
+
+    rebuildNavigationIndexes();
+
+    const shelfPath = join(wikiDir, '_index', 'by-topic', 'ai-agent-systems.md');
+    expect(existsSync(shelfPath)).toBe(true);
+    const content = readFileSync(shelfPath, 'utf-8');
+    expect(content).toContain('# AI Agent Systems');
+    expect(content).toContain('## Sources');
+    expect(content).toContain('[[sources/one]]');
+    expect(content).toContain('## Gaps');
   });
 
-  it('updates statistics correctly', () => {
-    writeFileSync(join(wikiDir, 'sources', 'a.md'), '# A', 'utf-8');
-    writeFileSync(join(wikiDir, 'sources', 'b.md'), '# B', 'utf-8');
-    writeFileSync(join(wikiDir, 'concepts', 'c1.md'), '# C1', 'utf-8');
+  it('writes a stage2 by-topic page for mature shelves', () => {
+    for (const [name, type] of [
+      ['one', 'engineering_practice'],
+      ['two', 'engineering_practice'],
+      ['three', 'discussion'],
+      ['four', 'discussion'],
+      ['five', 'technical_report'],
+    ] as const) {
+      writeSource(name, `---
+kind: source
+title: ${name}
+source_type: ${type}
+primary_subject: harness design for long-running ai agents
+candidate_shelves:
+  - AI Agent Systems
+recommended_shelf: AI Agent Systems
+unassigned: false
+---
 
-    updateMasterIndex('a');
+Body.
+`);
+    }
+
+    rebuildNavigationIndexes();
+
+    const shelfPath = join(wikiDir, '_index', 'by-topic', 'ai-agent-systems.md');
+    const content = readFileSync(shelfPath, 'utf-8');
+    expect(content).toContain('## When To Use This Shelf');
+    expect(content).toContain('## Maps');
+    expect(content).toContain('## Concepts');
+    expect(content).toContain('## Related Shelves');
+    expect(content).toContain('## Query Notes');
+  });
+
+  it('backward-compatible updateMasterIndex also rebuilds navigation indexes', () => {
+    for (const name of ['one', 'two', 'three']) {
+      writeSource(name, `---
+kind: source
+title: ${name}
+source_type: engineering_practice
+primary_subject: harness design for long-running ai agents
+candidate_shelves:
+  - AI Agent Systems
+recommended_shelf: AI Agent Systems
+unassigned: false
+---
+
+Body.
+`);
+    }
+
+    updateMasterIndex('one');
 
     const content = readFileSync(masterPath, 'utf-8');
-    expect(content).toContain('- Sources: 2');
-    expect(content).toContain('- Concepts: 1');
-    expect(content).toContain('- Maps: 0');
+    expect(content).toContain('### AI Agent Systems');
   });
 });

@@ -11,6 +11,29 @@ import { getSubDir, getConfigPath, readConfig, writeConfig } from '../config.js'
 import { runAgent } from '../pi.js';
 import { getPreset, resolveRunOptions } from '../presets.js';
 import { updateMasterIndex } from '../pipeline/index-updater.js';
+import { formatShelfAggregateSummary, scanSourceClassifications } from '../pipeline/shelf-aggregator.js';
+
+function extractCandidateShelfDefinitions(schemaContent: string): string {
+  const lines = schemaContent.split('\n');
+  const start = lines.findIndex(line => line.trim() === '## Candidate Shelves');
+  if (start === -1) {
+    return '- AI Agent Systems: agent architecture, harnesses, workflows, tool use, evaluation loops, engineering practice';
+  }
+
+  const extracted: string[] = [];
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.startsWith('## ')) break;
+    const match = line.match(/^- \*\*(.+?)\*\* — (.+)$/);
+    if (match) {
+      extracted.push(`- ${match[1]}: ${match[2]}`);
+    }
+  }
+
+  return extracted.length > 0
+    ? extracted.join('\n')
+    : '- AI Agent Systems: agent architecture, harnesses, workflows, tool use, evaluation loops, engineering practice';
+}
 
 /**
  * Quick compile: single markdown source → wiki/sources/ summary + index update.
@@ -23,6 +46,11 @@ import { updateMasterIndex } from '../pipeline/index-updater.js';
 export async function quickCompile(markdownPath: string, opts: GlobalOptions): Promise<void> {
   const wikiDir = getSubDir('wiki');
   const markdownContent = readFileSync(markdownPath, 'utf-8');
+  const schemaPath = join(wikiDir, 'SCHEMA.md');
+  const schemaContent = existsSync(schemaPath)
+    ? readFileSync(schemaPath, 'utf-8')
+    : '# Knowledge Base Schema\n';
+  const shelfDefinitions = extractCandidateShelfDefinitions(schemaContent);
   const sourceFilename = basename(markdownPath, '.md');
 
   if (opts.mode === 'json') {
@@ -30,11 +58,46 @@ export async function quickCompile(markdownPath: string, opts: GlobalOptions): P
     return;
   }
 
-  // Prompt only contains the task and data — architecture/rules come from agent + skill
   const prompt = `Quick compile: generate a wiki/sources/ summary for the following article.
 
 File: ${sourceFilename}.md
 Output to: wiki/sources/${sourceFilename}.md
+
+Return a complete markdown document with:
+1. YAML frontmatter that follows this contract exactly
+2. A readable source summary body
+
+Required frontmatter fields:
+- kind: source
+- title: article title
+- source_type: one of [engineering_practice, technical_report, paper, discussion, project_documentation, market_note, design_reference, other]
+- primary_subject: one-sentence subject description, not a tag list
+- candidate_shelves: YAML string array, may be empty
+- recommended_shelf: a single shelf name or null
+- unassigned: boolean
+
+Optional frontmatter fields:
+- shelf_confidence: high | medium | low
+- classification_reason: one short sentence explaining the classification
+
+Classification rules:
+- Be conservative. recommended_shelf: null is a valid output.
+- candidate_shelves may contain at most 3 shelf names.
+- recommended_shelf must appear in candidate_shelves when non-null.
+- Do not use URL domain, file format, article length, or existing classification inertia as shelf signals.
+- Use SCHEMA.md candidate shelf definitions as the only authority for shelf boundaries.
+
+Summary body structure:
+- # Summary
+- # Key Points
+- # References
+
+References minimum:
+- Include the original markdown path as [[markdown/${sourceFilename}]]
+- Include the original URL if the markdown contains one
+
+SCHEMA.md candidate shelf definitions:
+${shelfDefinitions}
 
 ${markdownContent}`;
 
@@ -113,6 +176,8 @@ export async function compileCommand(opts: GlobalOptions): Promise<void> {
   }
 
   console.log(`Deep compile: ${newSources.length} new source(s) to process.`);
+  const classificationScan = scanSourceClassifications(wikiDir);
+  const aggregateSummary = formatShelfAggregateSummary(classificationScan);
 
   // Build prompt with incremental context
   const sourcesList = newSources.map(s => `- sources/${s}.md`).join('\n');
@@ -120,6 +185,9 @@ export async function compileCommand(opts: GlobalOptions): Promise<void> {
 
 New sources since last compile:
 ${sourcesList}
+
+Current source classification summary:
+${aggregateSummary}
 
 Read these sources and the current wiki state (_index/master.md, SCHEMA.md, existing concepts/ and maps/).
 Then:

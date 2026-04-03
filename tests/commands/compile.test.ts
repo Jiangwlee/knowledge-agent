@@ -70,20 +70,28 @@ describe('quickCompile', () => {
     writeFileSync(markdownPath, '---\ntitle: Test\n---\n\n# Test Article\n\nContent here.', 'utf-8');
 
     const piOutput = `---
+kind: source
 title: Test Article
-source: text-input
-tags: [testing]
-date: 2026-04-03
+source_type: discussion
+primary_subject: test article walkthrough
+candidate_shelves:
+  - AI Agent Systems
+recommended_shelf: AI Agent Systems
+unassigned: false
 ---
 
-# Test Article
+# Summary
 
 Summary of the test article.
 
-## Key Points
+# Key Points
 
 - Point one
 - Point two
+
+# References
+
+- Original markdown: [[markdown/test-article]]
 `;
 
     mockSpawn.mockReturnValue(createMockProcess(piOutput));
@@ -104,6 +112,11 @@ Summary of the test article.
     const prompt = (args as string[])[(args as string[]).length - 1];
     expect(prompt).toContain('test-article.md');
     expect(prompt).toContain('Content here.');
+    expect(prompt).toContain('Required frontmatter fields');
+    expect(prompt).toContain('recommended_shelf');
+    expect(prompt).toContain('SCHEMA.md candidate shelf definitions');
+    expect(prompt).toContain('- AI Agent Systems:');
+    expect(prompt).not.toContain('# Schema\nTest schema.');
 
     // Verify source summary was saved
     const sourcePath = join(testDir, 'wiki', 'sources', 'test-article.md');
@@ -116,13 +129,27 @@ Summary of the test article.
     const markdownPath = join(testDir, 'markdown', 'new-source.md');
     writeFileSync(markdownPath, '# New Source\n\nContent.', 'utf-8');
 
-    mockSpawn.mockReturnValue(createMockProcess('Summary output.'));
+    mockSpawn.mockReturnValue(createMockProcess(`---
+kind: source
+title: New Source
+source_type: discussion
+primary_subject: new source content
+candidate_shelves: []
+recommended_shelf: null
+unassigned: true
+---
+
+# Summary
+
+Summary output.
+`));
 
     await quickCompile(markdownPath, {});
 
-    // Source file should exist for the count
     const masterContent = readFileSync(join(testDir, 'wiki', '_index', 'master.md'), 'utf-8');
-    expect(masterContent).toContain('[[sources/new-source]]');
+    expect(masterContent).toContain('## Bookshelves');
+    expect(masterContent).toContain('- Sources: 1');
+    expect(masterContent).toContain('_No active bookshelves yet.');
   });
 
   it('handles Pi failure gracefully', async () => {
@@ -146,7 +173,20 @@ Summary of the test article.
     const markdownPath = join(testDir, 'markdown', 'model-test.md');
     writeFileSync(markdownPath, '# Model Test\n\nContent.', 'utf-8');
 
-    mockSpawn.mockReturnValue(createMockProcess('Output.'));
+    mockSpawn.mockReturnValue(createMockProcess(`---
+kind: source
+title: Model Test
+source_type: discussion
+primary_subject: model test content
+candidate_shelves: []
+recommended_shelf: null
+unassigned: true
+---
+
+# Summary
+
+Output.
+`));
 
     await quickCompile(markdownPath, { model: 'openai/gpt-4o' });
 
@@ -159,7 +199,20 @@ Summary of the test article.
     const markdownPath = join(testDir, 'markdown', 'stream-test.md');
     writeFileSync(markdownPath, '# Stream Test\n\nContent.', 'utf-8');
 
-    mockSpawn.mockReturnValue(createMockProcess('Output.'));
+    mockSpawn.mockReturnValue(createMockProcess(`---
+kind: source
+title: Stream Test
+source_type: discussion
+primary_subject: stream test content
+candidate_shelves: []
+recommended_shelf: null
+unassigned: true
+---
+
+# Summary
+
+Output.
+`));
 
     await quickCompile(markdownPath, { mode: 'stream' });
 
@@ -196,7 +249,21 @@ describe('compileCommand (deep)', () => {
 
   it('processes new sources and calls Pi with compile preset', async () => {
     // Add a source file (no lastDeepCompile → all sources are new)
-    writeFileSync(join(testDir, 'wiki', 'sources', 'new-article.md'), '# New\n\nContent.', 'utf-8');
+    writeFileSync(join(testDir, 'wiki', 'sources', 'new-article.md'), `---
+kind: source
+title: New
+source_type: discussion
+primary_subject: new article topic
+candidate_shelves:
+  - AI Agent Systems
+recommended_shelf: AI Agent Systems
+unassigned: false
+---
+
+# Summary
+
+Content.
+`, 'utf-8');
     writeFileSync(join(testDir, 'config.json'), JSON.stringify({
       version: '0.1.0',
       createdAt: '2026-04-01T00:00:00.000Z',
@@ -213,6 +280,8 @@ describe('compileCommand (deep)', () => {
     // Prompt should mention new sources
     const prompt = (args as string[])[(args as string[]).length - 1];
     expect(prompt).toContain('new-article');
+    expect(prompt).toContain('Current source classification summary');
+    expect(prompt).toContain('AI Agent Systems');
 
     // Verify cwd set to wiki dir
     const spawnOpts = mockSpawn.mock.calls[0][2] as any;
