@@ -25,6 +25,13 @@ export async function queryCommand(question: string, opts: GlobalOptions): Promi
 
   const prompt = `Answer the following question using the knowledge base at ${wikiDir}.
 
+Query protocol:
+1. Start with \`kb-agent nav\`
+2. Then run \`kb-agent lookup "<question>" --mode json\`
+3. Then run \`kb-agent evidence "<path>" --mode json\` on the best candidate articles
+4. Prefer \`maps/\` and \`concepts/\` for synthesis, and use \`sources/\` for evidence verification
+5. Only fall back to raw file tools if the query primitives are insufficient
+
 Question: ${question}`;
 
   const preset = getPreset('query');

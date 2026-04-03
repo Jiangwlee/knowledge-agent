@@ -30,6 +30,10 @@ describe('PRESETS', () => {
     );
   });
 
+  it('query preset includes bash for query primitives', () => {
+    expect(PRESETS.query.tools).toContain('bash');
+  });
+
   it('all presets have required fields', () => {
     for (const [name, preset] of Object.entries(PRESETS)) {
       expect(preset.skills, `${name}.skills`).toBeInstanceOf(Array);

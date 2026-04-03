@@ -5,6 +5,9 @@
 
 import { Command } from 'commander';
 import { initCommand } from './commands/init.js';
+import { navCommand } from './commands/nav.js';
+import { lookupCommand } from './commands/lookup.js';
+import { evidenceCommand } from './commands/evidence.js';
 import { ingestCommand } from './commands/ingest.js';
 import { compileCommand } from './commands/compile.js';
 import { lintCommand } from './commands/lint.js';
@@ -39,6 +42,30 @@ function createProgram(): Command {
     .description('Initialize knowledge base directory structure')
     .action(async () => {
       await initCommand();
+    });
+
+  program
+    .command('nav')
+    .description('Show wiki navigation entrypoints and knowledge-base status')
+    .option('--mode <mode>', 'Output mode: text / json', 'text')
+    .action(async (opts: GlobalOptions) => {
+      await navCommand(opts);
+    });
+
+  program
+    .command('lookup <query>')
+    .description('Retrieve candidate wiki articles grouped by maps / concepts / sources')
+    .option('--mode <mode>', 'Output mode: text / json', 'text')
+    .action(async (query: string, opts: GlobalOptions) => {
+      await lookupCommand(query, opts);
+    });
+
+  program
+    .command('evidence <path>')
+    .description('Read and normalize a single wiki article')
+    .option('--mode <mode>', 'Output mode: text / json', 'text')
+    .action(async (path: string, opts: GlobalOptions) => {
+      await evidenceCommand(path, opts);
     });
 
   program

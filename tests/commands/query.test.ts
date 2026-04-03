@@ -61,6 +61,9 @@ describe('queryCommand', () => {
     // Verify question is in prompt
     const prompt = (args as string[])[(args as string[]).length - 1];
     expect(prompt).toContain('What is attention?');
+    expect(prompt).toContain('kb-agent nav');
+    expect(prompt).toContain('kb-agent lookup');
+    expect(prompt).toContain('kb-agent evidence');
 
     // Verify answer printed
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining('attention'));

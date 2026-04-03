@@ -33,7 +33,7 @@ export const PRESETS: Record<string, Preset> = {
   },
   query: {
     skills: [AGENT, 'skills/search/SKILL.md'],
-    tools: ['read', 'grep', 'find', 'ls'],
+    tools: ['read', 'bash', 'grep', 'find', 'ls'],
     thinking: 'medium',
   },
   lint: {
