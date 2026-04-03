@@ -86,7 +86,9 @@ install_remote() {
 
   if [[ -d "${INSTALL_DIR}/.git" ]]; then
     info "Repository found. Updating..."
-    git -C "${INSTALL_DIR}" pull origin main
+    git -C "${INSTALL_DIR}" fetch origin main
+    git -C "${INSTALL_DIR}" reset --hard origin/main
+    git -C "${INSTALL_DIR}" clean -fd
   else
     rm -rf "${INSTALL_DIR}"
     git clone "https://github.com/${GITHUB_REPO}.git" "${INSTALL_DIR}"
