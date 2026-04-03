@@ -10,12 +10,18 @@ import { getSubDir } from '../config.js';
 import { saveMarkdown, extractTitle, slugify } from '../pipeline/markdown.js';
 import { quickCompile } from './compile.js';
 
+// omp-web-operator returns different shapes depending on page type.
+// We only rely on the fields we know about; unknown fields are ignored.
 interface WebOperatorResult {
-  title: string;
-  url: string;
-  domain: string;
-  description: string;
-  content: string;
+  title?: string;
+  url?: string;
+  domain?: string;
+  description?: string;
+  content?: string;
+  // Fallback text field (e.g. Twitter/X, some social pages)
+  text?: string;
+  // Allow any additional fields without breaking the parse
+  [key: string]: unknown;
 }
 
 /**
@@ -104,11 +110,26 @@ export async function ingestCommand(
       return;
     }
 
+    const content = data.content ?? data.text ?? '';
+    const title = data.title;
+    const domain = data.domain ?? (data.url ? new URL(data.url).hostname : undefined);
+
+    if (!content.trim()) {
+      console.error(`Ingest failed: omp-web-operator returned no content for ${source}`);
+      console.error('Raw response:', JSON.stringify(data, null, 2));
+      return;
+    }
+
+    if (!title) {
+      console.warn(`No title found for ${source}. Raw response logged to stderr for inspection.`);
+      console.error('Raw response:', JSON.stringify(data, null, 2));
+    }
+
     const result = saveMarkdown({
-      content: data.content,
-      title: data.title,
+      content,
+      title,
       source: data.url || source,
-      domain: data.domain,
+      domain,
       description: data.description,
     });
 
@@ -118,7 +139,10 @@ export async function ingestCommand(
     }
 
     markdownPath = result.path;
-    console.log(`Ingested: ${data.title || result.filename} (${data.domain || 'unknown'})`);
+    console.log(`Ingested: ${title || result.filename} (${domain || 'unknown'})`);
+    if (!title) {
+      console.warn('Title missing — filename derived from URL. Edit the markdown file to set a title if needed.');
+    }
 
   } else {
     // Local file ingest (PDF, docx, images) — deferred until tech selection
