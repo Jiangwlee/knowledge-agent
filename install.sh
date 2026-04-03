@@ -20,6 +20,10 @@ GITHUB_REPO="Jiangwlee/knowledge-agent"
 INSTALL_DIR="${HOME}/.kb-agent"
 BIN_DIR="${HOME}/.local/bin"
 
+# Capture top-level BASH_SOURCE before entering any function.
+# Inside functions, BASH_SOURCE[0] returns "main", not the script path.
+_SCRIPT_SOURCE="${BASH_SOURCE[0]:-}"
+
 # ── Coloured output ───────────────────────────────────────────────────────────
 
 info()    { printf '\033[34m[INFO]\033[0m %s\n' "$1"; }
@@ -30,9 +34,8 @@ fail()    { printf '\033[31m[ERROR]\033[0m %s\n' "$1" >&2; exit 1; }
 # ── Mode detection ────────────────────────────────────────────────────────────
 
 detect_mode() {
-  local src="${BASH_SOURCE[0]:-}"
-  # curl | bash: src is empty, /dev/stdin, or /proc/self/fd/0
-  if [[ -z "$src" || "$src" == "/dev/stdin" || "$src" == /proc/self/fd/* ]]; then
+  # curl | bash: _SCRIPT_SOURCE is empty, /dev/stdin, or /proc/self/fd/0
+  if [[ -z "$_SCRIPT_SOURCE" || "$_SCRIPT_SOURCE" == "/dev/stdin" || "$_SCRIPT_SOURCE" == /proc/self/fd/* ]]; then
     echo "remote"
   else
     echo "local"
