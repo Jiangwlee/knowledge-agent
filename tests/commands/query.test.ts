@@ -125,4 +125,20 @@ describe('queryCommand', () => {
     expect(args).toContain('--mode');
     expect(args).toContain('json');
   });
+
+  it('does not print a duplicate answer in stream mode', async () => {
+    mockSpawn.mockReturnValue(createMockProcess('Answer.'));
+
+    await queryCommand('test', { mode: 'stream' });
+
+    expect(console.log).not.toHaveBeenCalledWith('Answer.');
+  });
+
+  it('does not print a second copy in json mode', async () => {
+    mockSpawn.mockReturnValue(createMockProcess('{"type":"message_update"}\n'));
+
+    await queryCommand('test', { mode: 'json' });
+
+    expect(console.log).not.toHaveBeenCalledWith(expect.stringContaining('"type":"message_update"'));
+  });
 });

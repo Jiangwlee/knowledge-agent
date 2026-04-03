@@ -144,8 +144,11 @@ kb-agent compile
 ```bash
 kb-agent query "transformer 和 RNN 的主要区别是什么？"
 
-# JSON 输出（适合脚本调用）
+# JSONL 事件流输出（适合调试或脚本消费 Pi 事件）
 kb-agent query "列出所有关于注意力机制的文章" --mode json
+
+# 实时流式输出（适合调试 agent 行为）
+kb-agent query "列出所有关于注意力机制的文章" --mode stream
 ```
 
 ### `kb-agent chat`
@@ -187,7 +190,7 @@ kb-agent lint
 | 选项 | 说明 | 示例 |
 |---|---|---|
 | `--model <model>` | 覆盖默认 LLM 模型 | `--model anthropic/claude-sonnet-4-6` |
-| `--mode <mode>` | Pi 输出模式（text/json） | `--mode json` |
+| `--mode <mode>` | Pi 输出模式（text / stream / json） | `--mode stream` |
 
 ## 数据目录结构
 

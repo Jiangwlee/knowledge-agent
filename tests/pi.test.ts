@@ -55,9 +55,10 @@ describe('runAgent', () => {
     const result = await runAgent({ prompt: 'question', mode: 'text' });
 
     expect(result.content).toBe('The answer is 42.');
+    expect(result.rendered).toBe(false);
   });
 
-  it('parses JSONL events and extracts text_delta in json mode', async () => {
+  it('passes through raw JSONL output in json mode', async () => {
     const events = [
       { type: 'session', version: 1, id: 's1', timestamp: '2026-04-03', cwd: '/tmp' },
       { type: 'agent_start' },
@@ -68,10 +69,14 @@ describe('runAgent', () => {
       { type: 'agent_end', messages: [] },
     ];
     mockSpawn.mockReturnValue(createJsonlMockProcess(events));
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true as any);
 
     const result = await runAgent({ prompt: 'greet', mode: 'json' });
 
-    expect(result.content).toBe('Hello world');
+    expect(result.rendered).toBe(true);
+    expect(result.content).toContain('"type":"message_update"');
+    const rendered = writeSpy.mock.calls.map(call => String(call[0])).join('');
+    expect(rendered).toContain('"type":"message_update"');
   });
 
   it('passes model flag when specified', async () => {
@@ -190,6 +195,7 @@ describe('runAgent', () => {
     const result = await runAgent({ prompt: 'test', mode: 'stream' });
 
     expect(result.content).toBe('Hello world');
+    expect(result.rendered).toBe(true);
     const rendered = writeSpy.mock.calls.map(call => String(call[0])).join('');
     expect(rendered).toContain('[assistant] Hello world');
     expect(rendered).toContain('[ok] read');

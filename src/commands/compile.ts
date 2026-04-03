@@ -25,6 +25,11 @@ export async function quickCompile(markdownPath: string, opts: GlobalOptions): P
   const markdownContent = readFileSync(markdownPath, 'utf-8');
   const sourceFilename = basename(markdownPath, '.md');
 
+  if (opts.mode === 'json') {
+    console.error('Quick compile does not support --mode json. Use text or stream.');
+    return;
+  }
+
   // Prompt only contains the task and data — architecture/rules come from agent + skill
   const prompt = `Quick compile: generate a wiki/sources/ summary for the following article.
 
@@ -135,6 +140,14 @@ Work incrementally — extend existing articles rather than rewriting them.`;
 
   try {
     const result = await runAgent(runOptions);
+
+    if (result.rendered) {
+      // Stream/json modes already rendered stdout directly; only keep side effects.
+      const currentConfig = readConfig() ?? { version: '0.1.0', createdAt: new Date().toISOString() };
+      writeConfig({ ...currentConfig, lastDeepCompile: new Date().toISOString() });
+      console.log('Deep compile complete. Timestamp recorded.');
+      return;
+    }
 
     if (result.content.trim()) {
       console.log(result.content.trim());

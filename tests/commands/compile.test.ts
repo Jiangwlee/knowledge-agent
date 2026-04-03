@@ -167,6 +167,16 @@ Summary of the test article.
     expect(args).toContain('--mode');
     expect(args).toContain('json');
   });
+
+  it('rejects json mode for quick compile', async () => {
+    const markdownPath = join(testDir, 'markdown', 'json-test.md');
+    writeFileSync(markdownPath, '# Json Test\n\nContent.', 'utf-8');
+
+    await quickCompile(markdownPath, { mode: 'json' });
+
+    expect(mockSpawn).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('does not support --mode json'));
+  });
 });
 
 describe('compileCommand (deep)', () => {
@@ -264,5 +274,20 @@ describe('compileCommand (deep)', () => {
     const args = mockSpawn.mock.calls[0][1] as string[];
     expect(args).toContain('--mode');
     expect(args).toContain('json');
+  });
+
+  it('does not print a duplicate summary in stream mode', async () => {
+    writeFileSync(join(testDir, 'wiki', 'sources', 'stream-summary.md'), '# Source\n\nContent.', 'utf-8');
+    writeFileSync(join(testDir, 'config.json'), JSON.stringify({
+      version: '0.1.0',
+      createdAt: '2026-04-01T00:00:00.000Z',
+    }), 'utf-8');
+
+    mockSpawn.mockReturnValue(createMockProcess('Done.'));
+
+    await compileCommand({ mode: 'stream' });
+
+    expect(console.log).not.toHaveBeenCalledWith('Done.');
+    expect(console.log).toHaveBeenCalledWith('Deep compile complete. Timestamp recorded.');
   });
 });

@@ -38,6 +38,10 @@ Question: ${question}`;
   try {
     const result = await runAgent(runOptions);
 
+    if (result.rendered) {
+      return;
+    }
+
     if (result.content.trim()) {
       console.log(result.content.trim());
     } else {

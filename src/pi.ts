@@ -37,6 +37,8 @@ export interface RunAgentOptions {
 export interface RunAgentResult {
   /** Collected text content from the agent response */
   content: string;
+  /** Whether stdout was already rendered directly by the runner */
+  rendered: boolean;
 }
 
 /**
@@ -230,7 +232,7 @@ function renderStreamEvent(line: string, state: StreamState): string | null {
  *
  * Spawns `pi` with the given options, collects the response, and returns it.
  * In text mode, stdout is collected directly.
- * In json mode, JSONL events are parsed and text_delta content is assembled.
+ * In json mode, raw JSONL stdout is passed through directly.
  * In stream mode, JSONL events are rendered live and text_delta content is assembled.
  */
 export async function runAgent(options: RunAgentOptions): Promise<RunAgentResult> {
@@ -254,7 +256,13 @@ export async function runAgent(options: RunAgentOptions): Promise<RunAgentResult
       proc.kill('SIGTERM');
     }, timeoutMs);
 
-    if (mode === 'json' || mode === 'stream') {
+    if (mode === 'json') {
+      proc.stdout!.on('data', (chunk: Buffer) => {
+        const text = chunk.toString();
+        content += text;
+        process.stdout.write(text);
+      });
+    } else if (mode === 'stream') {
       const rl = createInterface({ input: proc.stdout! });
       const streamState: StreamState = {
         inTextStream: false,
@@ -264,22 +272,13 @@ export async function runAgent(options: RunAgentOptions): Promise<RunAgentResult
         pendingTools: new Map(),
       };
       rl.on('line', (line) => {
-        if (mode === 'stream') {
-          const delta = renderStreamEvent(line, streamState);
-          if (delta !== null) {
-            content += delta;
-          }
-        } else {
-          const delta = extractTextDelta(line);
-          if (delta !== null) {
-            content += delta;
-          }
+        const delta = renderStreamEvent(line, streamState);
+        if (delta !== null) {
+          content += delta;
         }
       });
       rl.on('close', () => {
-        if (mode === 'stream') {
-          ensureLineClosed(streamState);
-        }
+        ensureLineClosed(streamState);
       });
     } else {
       proc.stdout!.on('data', (chunk: Buffer) => {
@@ -307,7 +306,7 @@ export async function runAgent(options: RunAgentOptions): Promise<RunAgentResult
       if (killed) {
         reject(new Error(`Pi process timed out after ${timeoutMs / 1000}s`));
       } else if (code === 0) {
-        resolve({ content: content.trim() });
+        resolve({ content: content.trim(), rendered: mode === 'json' || mode === 'stream' });
       } else {
         reject(new Error(
           `Pi process exited with code ${code}.${stderr ? ' Stderr: ' + stderr.trim() : ''}`

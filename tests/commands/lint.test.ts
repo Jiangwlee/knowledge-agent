@@ -178,4 +178,13 @@ describe('lintCommand', () => {
     expect(args).toContain('--mode');
     expect(args).toContain('json');
   });
+
+  it('does not print lint output twice in stream mode', async () => {
+    mockSpawn.mockReturnValue(createMockProcess('OK.'));
+
+    await lintCommand({ mode: 'stream' });
+
+    expect(console.log).not.toHaveBeenCalledWith('OK.');
+    expect(console.log).toHaveBeenCalledWith('Lint complete.');
+  });
 });

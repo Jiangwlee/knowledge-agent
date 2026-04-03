@@ -152,6 +152,11 @@ After fixing, print a summary of what you found and what you fixed.`;
   try {
     const result = await runAgent(runOptions);
 
+    if (result.rendered) {
+      console.log('Lint complete.');
+      return;
+    }
+
     if (result.content.trim()) {
       console.log(result.content.trim());
     }
