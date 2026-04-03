@@ -5,7 +5,8 @@
 
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { writeFileAtomic } from './pipeline/atomic-write.js';
 
 export interface Config {
   version: string;
@@ -40,5 +41,5 @@ export function readConfig(): Config | null {
 }
 
 export function writeConfig(config: Config): void {
-  writeFileSync(getConfigPath(), JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  writeFileAtomic(getConfigPath(), JSON.stringify(config, null, 2) + '\n');
 }

@@ -3,7 +3,8 @@
 // Saves content to the markdown/ directory with YAML frontmatter.
 // Handles filename generation (slugify), title extraction, and deduplication.
 
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { writeFileAtomic } from './atomic-write.js';
 import { join, basename } from 'node:path';
 import { getSubDir } from '../config.js';
 
@@ -126,7 +127,7 @@ export function saveMarkdown(input: SaveMarkdownInput): SaveMarkdownResult {
 
   const frontmatter = buildFrontmatter(input);
   const fullContent = `${frontmatter}\n\n${input.content}\n`;
-  writeFileSync(filepath, fullContent, 'utf-8');
+  writeFileAtomic(filepath, fullContent);
 
   return { path: filepath, filename, alreadyExists: false };
 }

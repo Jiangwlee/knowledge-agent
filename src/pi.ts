@@ -10,6 +10,9 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { buildPresetArgs } from './presets.js';
 
+/** Default timeout for Pi subprocess in milliseconds (5 minutes) */
+const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+
 export interface RunAgentOptions {
   /** The prompt to send to Pi */
   prompt: string;
@@ -27,6 +30,8 @@ export interface RunAgentOptions {
   mode?: 'text' | 'json';
   /** Working directory for the Pi process */
   cwd?: string;
+  /** Timeout in milliseconds (default: 5 minutes) */
+  timeout?: number;
 }
 
 export interface RunAgentResult {
@@ -34,9 +39,6 @@ export interface RunAgentResult {
   content: string;
 }
 
-/**
- * Build the CLI argument array for the pi command.
- */
 /**
  * Build the CLI argument array for pi in print mode.
  * Reuses buildPresetArgs for shared flags, adds print-mode specifics.
@@ -109,6 +111,14 @@ export async function runAgent(options: RunAgentOptions): Promise<RunAgentResult
 
     let content = '';
     let stderr = '';
+    let killed = false;
+
+    // Timeout guard
+    const timeoutMs = options.timeout ?? DEFAULT_TIMEOUT_MS;
+    const timer = setTimeout(() => {
+      killed = true;
+      proc.kill('SIGTERM');
+    }, timeoutMs);
 
     if (mode === 'json') {
       const rl = createInterface({ input: proc.stdout! });
@@ -128,8 +138,22 @@ export async function runAgent(options: RunAgentOptions): Promise<RunAgentResult
       stderr += chunk.toString();
     });
 
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        reject(new Error(
+          'pi not found. Install pi-coding-agent:\n  npm i -g @mariozechner/pi-coding-agent'
+        ));
+      } else {
+        reject(err);
+      }
+    });
+
     proc.on('close', (code) => {
-      if (code === 0) {
+      clearTimeout(timer);
+      if (killed) {
+        reject(new Error(`Pi process timed out after ${timeoutMs / 1000}s`));
+      } else if (code === 0) {
         resolve({ content: content.trim() });
       } else {
         reject(new Error(

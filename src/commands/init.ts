@@ -27,6 +27,13 @@ to understand how to maintain the wiki structure.
 4. _index/master.md is always kept up-to-date as the top-level entry point
 `;
 
+// Obsidian app.json: enable wikilinks, no strict line breaks
+const OBSIDIAN_APP_CONFIG = JSON.stringify({
+  useMarkdownLinks: false,     // Use [[wikilinks]] not [](markdown links)
+  strictLineBreaks: true,      // Standard markdown line breaks
+  showFrontmatter: false,      // Hide YAML frontmatter in preview
+}, null, 2);
+
 const MASTER_INDEX_INITIAL = `# Master Index
 
 > LLM entry point: read this file first to navigate the knowledge base.
@@ -58,6 +65,7 @@ export async function initCommand(): Promise<void> {
     join(wikiDir, 'concepts'),
     join(wikiDir, 'maps'),
     join(wikiDir, '_index'),
+    join(wikiDir, '.obsidian'),
   ];
 
   for (const dir of dirs) {
@@ -68,6 +76,7 @@ export async function initCommand(): Promise<void> {
   const files: Array<[string, string]> = [
     [join(wikiDir, 'SCHEMA.md'), SCHEMA_INITIAL],
     [join(wikiDir, '_index', 'master.md'), MASTER_INDEX_INITIAL],
+    [join(wikiDir, '.obsidian', 'app.json'), OBSIDIAN_APP_CONFIG],
   ];
 
   for (const [path, content] of files) {

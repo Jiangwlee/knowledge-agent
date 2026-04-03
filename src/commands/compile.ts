@@ -3,7 +3,8 @@
 // Quick compile: single source → wiki/sources/ summary + index update (triggered by ingest)
 // Deep compile: LLM-autonomous cross-source synthesis → concepts/ + maps/ + _index/ (Phase 4)
 
-import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import { writeFileAtomic } from '../pipeline/atomic-write.js';
 import { join, basename } from 'node:path';
 import type { GlobalOptions } from '../cli.js';
 import { getSubDir, getConfigPath, readConfig, writeConfig } from '../config.js';
@@ -46,7 +47,7 @@ ${markdownContent}`;
       const sourcesDir = join(wikiDir, 'sources');
       mkdirSync(sourcesDir, { recursive: true });
       const sourcePath = join(sourcesDir, `${sourceFilename}.md`);
-      writeFileSync(sourcePath, result.content.trim() + '\n', 'utf-8');
+      writeFileAtomic(sourcePath, result.content.trim() + '\n');
       console.log(`Source summary: wiki/sources/${sourceFilename}.md`);
 
       // Update master index
