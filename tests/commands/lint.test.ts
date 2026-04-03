@@ -168,4 +168,14 @@ describe('lintCommand', () => {
 
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Lint failed'));
   });
+
+  it('passes --mode json when stream mode requested', async () => {
+    mockSpawn.mockReturnValue(createMockProcess('OK.'));
+
+    await lintCommand({ mode: 'stream' });
+
+    const args = mockSpawn.mock.calls[0][1] as string[];
+    expect(args).toContain('--mode');
+    expect(args).toContain('json');
+  });
 });

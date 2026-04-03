@@ -145,7 +145,7 @@ After fixing, print a summary of what you found and what you fixed.`;
   const runOptions = resolveRunOptions(preset, {
     prompt,
     model: opts.model,
-    mode: opts.mode as 'text' | 'json' | undefined,
+    mode: opts.mode as 'text' | 'json' | 'stream' | undefined,
   });
   runOptions.cwd = wikiDir;
 

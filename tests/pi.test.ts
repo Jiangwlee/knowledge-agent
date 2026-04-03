@@ -33,6 +33,7 @@ function createJsonlMockProcess(events: object[], exitCode = 0) {
 
 beforeEach(() => {
   mockSpawn.mockReset();
+  vi.restoreAllMocks();
 });
 
 describe('runAgent', () => {
@@ -159,5 +160,38 @@ describe('runAgent', () => {
     const args = mockSpawn.mock.calls[0][1] as string[];
     expect(args).toContain('--mode');
     expect(args).toContain('json');
+  });
+
+  it('passes --mode json when stream mode specified', async () => {
+    const events = [
+      { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'ok' } },
+      { type: 'message_end', message: { role: 'assistant' } },
+    ];
+    mockSpawn.mockReturnValue(createJsonlMockProcess(events));
+
+    await runAgent({ prompt: 'test', mode: 'stream' });
+
+    const args = mockSpawn.mock.calls[0][1] as string[];
+    expect(args).toContain('--mode');
+    expect(args).toContain('json');
+  });
+
+  it('renders text deltas and tool summaries in stream mode', async () => {
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true as any);
+    const events = [
+      { type: 'tool_execution_start', toolCallId: '1', toolName: 'read', args: { file: 'wiki/_index/master.md' } },
+      { type: 'tool_execution_end', toolCallId: '1', toolName: 'read', result: { content: 'ok' } },
+      { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Hello' } },
+      { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: ' world\n' } },
+      { type: 'message_end', message: { role: 'assistant' } },
+    ];
+    mockSpawn.mockReturnValue(createJsonlMockProcess(events));
+
+    const result = await runAgent({ prompt: 'test', mode: 'stream' });
+
+    expect(result.content).toBe('Hello world');
+    const rendered = writeSpy.mock.calls.map(call => String(call[0])).join('');
+    expect(rendered).toContain('[assistant] Hello world');
+    expect(rendered).toContain('[ok] read');
   });
 });

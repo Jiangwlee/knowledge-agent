@@ -62,7 +62,7 @@ export function getPreset(command: string): Preset {
 export interface CliOverrides {
   prompt: string;
   model?: string;
-  mode?: 'text' | 'json';
+  mode?: 'text' | 'json' | 'stream';
 }
 
 /**

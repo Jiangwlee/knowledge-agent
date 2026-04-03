@@ -26,8 +26,8 @@ export interface RunAgentOptions {
   model?: string;
   /** Thinking level: off/minimal/low/medium/high/xhigh */
   thinking?: string;
-  /** Output mode: 'text' (default) collects stdout, 'json' parses JSONL events */
-  mode?: 'text' | 'json';
+  /** Output mode: text collects stdout, json parses JSONL, stream renders JSONL live */
+  mode?: 'text' | 'json' | 'stream';
   /** Working directory for the Pi process */
   cwd?: string;
   /** Timeout in milliseconds (default: 5 minutes) */
@@ -47,7 +47,7 @@ function buildArgs(options: RunAgentOptions): string[] {
   const args: string[] = ['--no-session', '-p'];
   const mode = options.mode ?? 'text';
 
-  if (mode === 'json') {
+  if (mode === 'json' || mode === 'stream') {
     args.push('--mode', 'json');
   }
 
@@ -92,12 +92,146 @@ function extractTextDelta(line: string): string | null {
   return null;
 }
 
+interface StreamState {
+  inTextStream: boolean;
+  lineOpen: boolean;
+  pendingTrailingNewlines: string;
+  assistantStreamOpen: boolean;
+  pendingTools: Map<string, { name: string; argsSummary: string }>;
+}
+
+function summarizeArgs(args: unknown): string {
+  if (!args || typeof args !== 'object') return '';
+
+  const entries = Object.entries(args as Record<string, unknown>)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .slice(0, 3)
+    .map(([key, value]) => {
+      const rendered = typeof value === 'string' ? value : JSON.stringify(value);
+      const compact = rendered.length > 60 ? `${rendered.slice(0, 57)}...` : rendered;
+      return `${key}=${compact}`;
+    });
+
+  return entries.join(' ');
+}
+
+function summarizeResult(result: unknown): string {
+  if (result === undefined || result === null) return '';
+  const rendered = typeof result === 'string' ? result : JSON.stringify(result);
+  const compact = rendered.replace(/\s+/g, ' ').trim();
+  return compact.length > 80 ? `${compact.slice(0, 77)}...` : compact;
+}
+
+function splitVisibleAndTrailing(delta: string): [string, string] {
+  const stripped = delta.replace(/\n+$/, '');
+  return [stripped, delta.slice(stripped.length)];
+}
+
+function flushTrailingNewlines(state: StreamState, compact: boolean): void {
+  if (!state.pendingTrailingNewlines) return;
+  process.stdout.write(compact ? '\n' : state.pendingTrailingNewlines);
+  state.lineOpen = !compact && !state.pendingTrailingNewlines.endsWith('\n');
+  state.pendingTrailingNewlines = '';
+}
+
+function ensureLineClosed(state: StreamState): void {
+  if (state.pendingTrailingNewlines) {
+    process.stdout.write('\n');
+    state.pendingTrailingNewlines = '';
+    state.lineOpen = false;
+  }
+  if (state.lineOpen) {
+    process.stdout.write('\n');
+    state.lineOpen = false;
+  }
+  state.inTextStream = false;
+  state.assistantStreamOpen = false;
+}
+
+function renderStreamEvent(line: string, state: StreamState): string | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+
+  let event: any;
+  try {
+    event = JSON.parse(trimmed);
+  } catch {
+    ensureLineClosed(state);
+    process.stdout.write(`${trimmed}\n`);
+    return null;
+  }
+
+  if (event.type === 'message_update') {
+    const assistantEvent = event.assistantMessageEvent ?? {};
+    if (
+      assistantEvent.type === 'text_delta' &&
+      typeof assistantEvent.delta === 'string'
+    ) {
+      flushTrailingNewlines(state, !state.assistantStreamOpen);
+      if (!state.inTextStream) {
+        process.stdout.write('[assistant] ');
+        state.inTextStream = true;
+        state.lineOpen = true;
+      }
+      state.assistantStreamOpen = true;
+      const [visible, trailing] = splitVisibleAndTrailing(assistantEvent.delta);
+      if (visible) {
+        process.stdout.write(visible);
+        state.lineOpen = true;
+      }
+      if (trailing) {
+        state.pendingTrailingNewlines += trailing;
+      }
+      return assistantEvent.delta;
+    }
+
+    if (assistantEvent.type === 'text_end' && state.inTextStream) {
+      state.inTextStream = false;
+      state.assistantStreamOpen = false;
+    }
+    return null;
+  }
+
+  if (event.type === 'tool_execution_start') {
+    flushTrailingNewlines(state, true);
+    ensureLineClosed(state);
+    state.pendingTools.set(String(event.toolCallId ?? ''), {
+      name: String(event.toolName ?? 'tool'),
+      argsSummary: summarizeArgs(event.args),
+    });
+    return null;
+  }
+
+  if (event.type === 'tool_execution_end') {
+    flushTrailingNewlines(state, true);
+    ensureLineClosed(state);
+    const toolCallId = String(event.toolCallId ?? '');
+    const tool = state.pendingTools.get(toolCallId) ?? {
+      name: String(event.toolName ?? 'tool'),
+      argsSummary: summarizeArgs(event.args),
+    };
+    state.pendingTools.delete(toolCallId);
+    const status = event.isError ? 'x' : 'ok';
+    const summary = summarizeResult(event.result);
+    const suffix = summary ? `  ${summary}` : '';
+    process.stdout.write(`  [${status}] ${tool.name}  ${tool.argsSummary}${suffix}\n`);
+    return null;
+  }
+
+  if (event.type === 'message_end') {
+    state.assistantStreamOpen = false;
+  }
+
+  return null;
+}
+
 /**
  * Run a Pi agent in single-shot print mode.
  *
  * Spawns `pi` with the given options, collects the response, and returns it.
  * In text mode, stdout is collected directly.
  * In json mode, JSONL events are parsed and text_delta content is assembled.
+ * In stream mode, JSONL events are rendered live and text_delta content is assembled.
  */
 export async function runAgent(options: RunAgentOptions): Promise<RunAgentResult> {
   const args = buildArgs(options);
@@ -120,12 +254,31 @@ export async function runAgent(options: RunAgentOptions): Promise<RunAgentResult
       proc.kill('SIGTERM');
     }, timeoutMs);
 
-    if (mode === 'json') {
+    if (mode === 'json' || mode === 'stream') {
       const rl = createInterface({ input: proc.stdout! });
+      const streamState: StreamState = {
+        inTextStream: false,
+        lineOpen: false,
+        pendingTrailingNewlines: '',
+        assistantStreamOpen: false,
+        pendingTools: new Map(),
+      };
       rl.on('line', (line) => {
-        const delta = extractTextDelta(line);
-        if (delta !== null) {
-          content += delta;
+        if (mode === 'stream') {
+          const delta = renderStreamEvent(line, streamState);
+          if (delta !== null) {
+            content += delta;
+          }
+        } else {
+          const delta = extractTextDelta(line);
+          if (delta !== null) {
+            content += delta;
+          }
+        }
+      });
+      rl.on('close', () => {
+        if (mode === 'stream') {
+          ensureLineClosed(streamState);
         }
       });
     } else {

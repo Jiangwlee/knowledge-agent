@@ -45,7 +45,7 @@ function createProgram(): Command {
     .command('ingest <source>')
     .description('Import raw material (URL or --text for stdin)')
     .option('--model <model>', 'LLM model override')
-    .option('--mode <mode>', 'Pi output mode: text / stream / json / interactive', 'text')
+    .option('--mode <mode>', 'Pi output mode: text / stream / json', 'text')
     .action(async (source: string, opts: GlobalOptions) => {
       let textInput: string | undefined;
       if (source === '--text' && !process.stdin.isTTY) {
@@ -58,7 +58,7 @@ function createProgram(): Command {
     .command('compile')
     .description('Deep compile: cross-source synthesis, concept extraction, maps generation')
     .option('--model <model>', 'LLM model override')
-    .option('--mode <mode>', 'Pi output mode: text / stream / json / interactive', 'text')
+    .option('--mode <mode>', 'Pi output mode: text / stream / json', 'text')
     .action(async (opts: GlobalOptions) => {
       await compileCommand(opts);
     });
@@ -67,7 +67,7 @@ function createProgram(): Command {
     .command('lint')
     .description('Health check: find contradictions, gaps, and suggest new connections')
     .option('--model <model>', 'LLM model override')
-    .option('--mode <mode>', 'Pi output mode: text / stream / json / interactive', 'text')
+    .option('--mode <mode>', 'Pi output mode: text / stream / json', 'text')
     .action(async (opts: GlobalOptions) => {
       await lintCommand(opts);
     });
@@ -76,7 +76,7 @@ function createProgram(): Command {
     .command('query <question>')
     .description('Ask a question against the wiki')
     .option('--model <model>', 'LLM model override')
-    .option('--mode <mode>', 'Pi output mode: text / stream / json / interactive', 'text')
+    .option('--mode <mode>', 'Pi output mode: text / stream / json', 'text')
     .action(async (question: string, opts: GlobalOptions) => {
       await queryCommand(question, opts);
     });

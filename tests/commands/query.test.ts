@@ -115,4 +115,14 @@ describe('queryCommand', () => {
     expect(args).toContain('--mode');
     expect(args).toContain('json');
   });
+
+  it('passes --mode json when stream mode requested', async () => {
+    mockSpawn.mockReturnValue(createMockProcess('Answer.'));
+
+    await queryCommand('test', { mode: 'stream' });
+
+    const args = mockSpawn.mock.calls[0][1] as string[];
+    expect(args).toContain('--mode');
+    expect(args).toContain('json');
+  });
 });

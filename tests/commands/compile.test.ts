@@ -154,6 +154,19 @@ Summary of the test article.
     expect(args).toContain('--model');
     expect(args).toContain('openai/gpt-4o');
   });
+
+  it('passes --mode json when quick compile uses stream mode', async () => {
+    const markdownPath = join(testDir, 'markdown', 'stream-test.md');
+    writeFileSync(markdownPath, '# Stream Test\n\nContent.', 'utf-8');
+
+    mockSpawn.mockReturnValue(createMockProcess('Output.'));
+
+    await quickCompile(markdownPath, { mode: 'stream' });
+
+    const args = mockSpawn.mock.calls[0][1] as string[];
+    expect(args).toContain('--mode');
+    expect(args).toContain('json');
+  });
 });
 
 describe('compileCommand (deep)', () => {
@@ -235,5 +248,21 @@ describe('compileCommand (deep)', () => {
 
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('init'));
     expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it('passes --mode json when deep compile uses stream mode', async () => {
+    writeFileSync(join(testDir, 'wiki', 'sources', 'stream-source.md'), '# Source\n\nContent.', 'utf-8');
+    writeFileSync(join(testDir, 'config.json'), JSON.stringify({
+      version: '0.1.0',
+      createdAt: '2026-04-01T00:00:00.000Z',
+    }), 'utf-8');
+
+    mockSpawn.mockReturnValue(createMockProcess('Done.'));
+
+    await compileCommand({ mode: 'stream' });
+
+    const args = mockSpawn.mock.calls[0][1] as string[];
+    expect(args).toContain('--mode');
+    expect(args).toContain('json');
   });
 });

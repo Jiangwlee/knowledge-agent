@@ -37,6 +37,7 @@ ${markdownContent}`;
   const runOptions = resolveRunOptions(preset, {
     prompt,
     model: opts.model,
+    mode: opts.mode as 'text' | 'json' | 'stream' | undefined,
   });
 
   try {
@@ -128,7 +129,7 @@ Work incrementally — extend existing articles rather than rewriting them.`;
   const runOptions = resolveRunOptions(preset, {
     prompt,
     model: opts.model,
-    mode: opts.mode as 'text' | 'json' | undefined,
+    mode: opts.mode as 'text' | 'json' | 'stream' | undefined,
   });
   runOptions.cwd = wikiDir;
 

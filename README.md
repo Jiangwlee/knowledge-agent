@@ -34,6 +34,25 @@ kb-agent 通过四级数据管线处理知识：
 
 ## 安装
 
+### 一键安装（推荐）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Jiangwlee/knowledge-agent/main/install.sh | bash
+```
+
+该方式会：
+- 克隆仓库到 `~/.kb-agent/`
+- 安装生产依赖
+- 将 `kb-agent` 注册到 `~/.local/bin/`
+
+也可以在本地仓库中直接运行：
+
+```bash
+./install.sh
+```
+
+### 开发模式安装
+
 ```bash
 # 克隆项目
 git clone https://github.com/anthropics/knowledge-agent.git
