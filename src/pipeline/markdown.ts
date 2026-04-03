@@ -159,6 +159,9 @@ export function parseFrontmatter<T extends Record<string, FrontmatterValue> = Re
   const lines = rawFrontmatter.split('\n');
 
   let currentArrayKey: string | null = null;
+  // Track keys set via bare `key:` (no value) that might be arrays or null.
+  // If they receive array items, they stay as arrays. If not, they become null.
+  const bareKeys = new Set<string>();
 
   for (const line of lines) {
     if (line.trim().length === 0) continue;
@@ -169,6 +172,7 @@ export function parseFrontmatter<T extends Record<string, FrontmatterValue> = Re
       if (Array.isArray(current)) {
         current.push(parseYamlScalar(arrayItem[1]) as string | number | boolean);
         frontmatter[currentArrayKey] = current as FrontmatterValue;
+        bareKeys.delete(currentArrayKey); // received items → confirmed array
       }
       continue;
     }
@@ -186,12 +190,21 @@ export function parseFrontmatter<T extends Record<string, FrontmatterValue> = Re
     }
 
     if (rawValue.length === 0) {
+      // Could be an array start (followed by `- item` lines) or an empty value.
+      // Optimistically treat as array; track in bareKeys for post-loop cleanup.
       frontmatter[key] = [];
       currentArrayKey = key;
+      bareKeys.add(key);
       continue;
     }
 
     frontmatter[key] = parseYamlScalar(rawValue) as FrontmatterValue;
+  }
+
+  // Bare `key:` entries that never received array items are ambiguous.
+  // Convert them to null — if the intent was an empty array, use `key: []`.
+  for (const key of bareKeys) {
+    frontmatter[key] = null;
   }
 
   return { frontmatter: frontmatter as T, body };

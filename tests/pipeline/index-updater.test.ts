@@ -22,6 +22,16 @@ beforeEach(() => {
   mkdirSync(join(wikiDir, 'concepts'), { recursive: true });
   mkdirSync(join(wikiDir, 'maps'), { recursive: true });
   mkdirSync(join(wikiDir, '_index', 'by-topic'), { recursive: true });
+  writeFileSync(join(wikiDir, 'SCHEMA.md'), `# Knowledge Base Schema
+
+## Candidate Shelves
+
+- **AI Agent Systems** — agent architecture, harnesses, workflows, tool use, evaluation loops, engineering practice
+- **LLM Models** — training, alignment, inference, reasoning, benchmarks, capabilities
+- **Trading** — stock trading, strategy, execution, market structure, risk management
+- **Design** — UI/UX, web design, interaction patterns, visual systems, frontend experience
+- **GitHub Projects** — specific project architecture, evolution, implementation choices, maintenance practice
+`, 'utf-8');
   process.env.KB_AGENT_DATA_DIR = testDir;
 });
 

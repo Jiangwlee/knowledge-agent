@@ -4,20 +4,42 @@
 // source classifications. This keeps runtime navigation aligned with the
 // library-first architecture instead of incrementally patching old sections.
 
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { getSubDir } from '../config.js';
 import { writeFileAtomic } from './atomic-write.js';
 import { slugify } from './markdown.js';
 import { scanSourceClassifications, type ShelfAggregate } from './shelf-aggregator.js';
 
-const SHELF_DESCRIPTIONS: Record<string, string> = {
-  'AI Agent Systems': 'AI agents, harnesses, workflows, tool use, evaluation loops, engineering practice.',
-  'LLM Models': 'Training, alignment, inference, reasoning, benchmarks, capabilities.',
-  Trading: 'Stock trading, strategy, execution, market structure, risk management.',
-  Design: 'UI/UX, web design, interaction patterns, visual systems, frontend experience.',
-  'GitHub Projects': 'Repositories, architectures, implementation notes, maintainers, project evolution.',
-};
+/**
+ * Parse candidate shelf descriptions from SCHEMA.md.
+ * SCHEMA.md is the single source of truth for shelf definitions.
+ * Falls back to shelf name if SCHEMA.md is missing or unparseable.
+ */
+function parseShelfDescriptions(wikiDir: string): Record<string, string> {
+  const schemaPath = join(wikiDir, 'SCHEMA.md');
+  if (!existsSync(schemaPath)) return {};
+
+  const content = readFileSync(schemaPath, 'utf-8');
+  const lines = content.split('\n');
+  const start = lines.findIndex(line => line.trim() === '## Candidate Shelves');
+  if (start === -1) return {};
+
+  const descriptions: Record<string, string> = {};
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.startsWith('## ')) break;
+    const match = line.match(/^- \*\*(.+?)\*\* — (.+)$/);
+    if (match) {
+      descriptions[match[1]] = match[2].endsWith('.') ? match[2] : `${match[2]}.`;
+    }
+  }
+  return descriptions;
+}
+
+function getShelfDescription(shelf: string, descriptions: Record<string, string>): string {
+  return descriptions[shelf] ?? `${shelf} — description pending.`;
+}
 
 function countMdFiles(dir: string): number {
   if (!existsSync(dir)) return 0;
@@ -34,7 +56,7 @@ function activeShelves(aggregates: ShelfAggregate[]): ShelfAggregate[] {
   );
 }
 
-function renderMasterIndex(aggregates: ShelfAggregate[], wikiDir: string): string {
+function renderMasterIndex(aggregates: ShelfAggregate[], wikiDir: string, descriptions: Record<string, string>): string {
   const active = activeShelves(aggregates);
   const totalSources = countMdFiles(join(wikiDir, 'sources'));
   const totalConcepts = countMdFiles(join(wikiDir, 'concepts'));
@@ -67,7 +89,7 @@ function renderMasterIndex(aggregates: ShelfAggregate[], wikiDir: string): strin
   } else {
     for (const aggregate of active) {
       lines.push(`### ${titleForShelf(aggregate.shelf)}`);
-      lines.push(`Focus: ${SHELF_DESCRIPTIONS[aggregate.shelf] ?? 'Shelf description pending.'}`);
+      lines.push(`Focus: ${getShelfDescription(aggregate.shelf, descriptions)}`);
       lines.push(`Sources: ${aggregate.sourceCount}`);
       lines.push(`Status: ${aggregate.activationStatus === 'active_stage2' ? 'mature' : 'young'}`);
       lines.push(`Shelf page: [[_index/by-topic/${slugify(aggregate.shelf)}]]`);
@@ -113,11 +135,11 @@ function renderMasterIndex(aggregates: ShelfAggregate[], wikiDir: string): strin
   return lines.join('\n');
 }
 
-function renderStage1ShelfPage(aggregate: ShelfAggregate): string {
+function renderStage1ShelfPage(aggregate: ShelfAggregate, descriptions: Record<string, string>): string {
   const lines: string[] = [
     `# ${titleForShelf(aggregate.shelf)}`,
     '',
-    `> ${SHELF_DESCRIPTIONS[aggregate.shelf] ?? 'Shelf description pending.'}`,
+    `> ${getShelfDescription(aggregate.shelf, descriptions)}`,
     '',
     '## Sources',
     '',
@@ -144,15 +166,15 @@ function renderStage1ShelfPage(aggregate: ShelfAggregate): string {
   return lines.join('\n');
 }
 
-function renderStage2ShelfPage(aggregate: ShelfAggregate): string {
+function renderStage2ShelfPage(aggregate: ShelfAggregate, descriptions: Record<string, string>): string {
   const lines: string[] = [
     `# ${titleForShelf(aggregate.shelf)}`,
     '',
-    `> ${SHELF_DESCRIPTIONS[aggregate.shelf] ?? 'Shelf description pending.'}`,
+    `> ${getShelfDescription(aggregate.shelf, descriptions)}`,
     '',
     '## When To Use This Shelf',
     '',
-    `Use this shelf for questions about ${SHELF_DESCRIPTIONS[aggregate.shelf] ?? aggregate.shelf.toLowerCase()}`,
+    `Use this shelf for questions about ${getShelfDescription(aggregate.shelf, descriptions).toLowerCase()}`,
     '',
     '## Reading Order',
     '',
@@ -196,15 +218,15 @@ function renderStage2ShelfPage(aggregate: ShelfAggregate): string {
   return lines.join('\n');
 }
 
-function writeShelfPages(aggregates: ShelfAggregate[], wikiDir: string): void {
+function writeShelfPages(aggregates: ShelfAggregate[], wikiDir: string, descriptions: Record<string, string>): void {
   const byTopicDir = join(wikiDir, '_index', 'by-topic');
   mkdirSync(byTopicDir, { recursive: true });
 
   for (const aggregate of activeShelves(aggregates)) {
     const path = join(byTopicDir, `${slugify(aggregate.shelf)}.md`);
     const content = aggregate.activationStatus === 'active_stage2'
-      ? renderStage2ShelfPage(aggregate)
-      : renderStage1ShelfPage(aggregate);
+      ? renderStage2ShelfPage(aggregate, descriptions)
+      : renderStage1ShelfPage(aggregate, descriptions);
     writeFileAtomic(path, content);
   }
 }
@@ -214,10 +236,11 @@ export function rebuildNavigationIndexes(): void {
   const indexDir = join(wikiDir, '_index');
   mkdirSync(indexDir, { recursive: true });
 
+  const descriptions = parseShelfDescriptions(wikiDir);
   const scan = scanSourceClassifications(wikiDir);
   const masterPath = join(indexDir, 'master.md');
-  writeFileAtomic(masterPath, renderMasterIndex(scan.aggregates, wikiDir));
-  writeShelfPages(scan.aggregates, wikiDir);
+  writeFileAtomic(masterPath, renderMasterIndex(scan.aggregates, wikiDir, descriptions));
+  writeShelfPages(scan.aggregates, wikiDir, descriptions);
 }
 
 /**

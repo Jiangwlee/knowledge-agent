@@ -165,7 +165,10 @@ function inferActivationStatus(
     return 'active_stage1';
   }
 
-  if (existsSync(byTopicPath)) {
+  // Only mark as degrading if the shelf was previously active (by-topic file exists)
+  // AND still has some sources. A shelf with 0 sources and an old by-topic file
+  // is simply inactive — the file is retained per design but doesn't imply degrading.
+  if (existsSync(byTopicPath) && records.length > 0) {
     return 'degrading';
   }
 

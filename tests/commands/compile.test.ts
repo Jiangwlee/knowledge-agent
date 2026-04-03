@@ -36,19 +36,17 @@ beforeEach(() => {
   mkdirSync(join(testDir, 'wiki', 'maps'), { recursive: true });
   mkdirSync(join(testDir, 'wiki', '_index'), { recursive: true });
 
-  writeFileSync(join(testDir, 'wiki', 'SCHEMA.md'), '# Schema\nTest schema.', 'utf-8');
-  writeFileSync(join(testDir, 'wiki', '_index', 'master.md'), `# Master Index
+  writeFileSync(join(testDir, 'wiki', 'SCHEMA.md'), `# Knowledge Base Schema
 
-## Recent Sources
+## Candidate Shelves
 
-_Empty._
-
-## Statistics
-
-- Sources: 0
-- Concepts: 0
-- Maps: 0
+- **AI Agent Systems** — agent architecture, harnesses, workflows, tool use, evaluation loops, engineering practice
+- **LLM Models** — training, alignment, inference, reasoning, benchmarks, capabilities
+- **Trading** — stock trading, strategy, execution, market structure, risk management
+- **Design** — UI/UX, web design, interaction patterns, visual systems, frontend experience
+- **GitHub Projects** — specific project architecture, evolution, implementation choices, maintenance practice
 `, 'utf-8');
+  mkdirSync(join(testDir, 'wiki', '_index', 'by-topic'), { recursive: true });
 
   process.env.KB_AGENT_DATA_DIR = testDir;
   mockSpawn.mockReset();
@@ -116,7 +114,7 @@ Summary of the test article.
     expect(prompt).toContain('recommended_shelf');
     expect(prompt).toContain('SCHEMA.md candidate shelf definitions');
     expect(prompt).toContain('- AI Agent Systems:');
-    expect(prompt).not.toContain('# Schema\nTest schema.');
+    expect(prompt).not.toContain('# Knowledge Base Schema');
 
     // Verify source summary was saved
     const sourcePath = join(testDir, 'wiki', 'sources', 'test-article.md');
