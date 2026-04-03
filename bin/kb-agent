@@ -1,0 +1,7 @@
+#!/usr/bin/env -S node --import tsx
+// kb-agent — CLI entry point
+// Delegates to src/cli.ts for all command routing
+
+import { main } from '../src/cli.ts';
+
+main();

@@ -1,0 +1,27 @@
+{
+  "name": "kb-agent",
+  "version": "0.1.0",
+  "description": "CLI knowledge management tool based on Karpathy's LLM Wiki methodology",
+  "type": "module",
+  "bin": {
+    "kb-agent": "./bin/kb-agent"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": ["knowledge", "wiki", "llm", "cli"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
+  }
+}
