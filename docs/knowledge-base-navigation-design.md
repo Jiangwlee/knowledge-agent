@@ -494,14 +494,532 @@ Recent Activity 是轻量导航信号，不是操作日志。
 
 下一步需要继续设计：
 
-1. `_index/by-topic/` 的文件结构
-2. 每个主书架下的具体卡片内容模板
-3. compile 如何为新来源分配主书架（含候选书架匹配逻辑）
-4. compile 如何检测书架激活阈值并自动注册
-5. compile 如何触发书架页从阶段一到阶段二的过渡
-6. 何时允许新增候选书架
-7. 何时允许某个主书架长出更细的子层级
-8. Recent Activity 的自动维护机制
+1. 每个主书架下的具体卡片内容模板
+2. 何时允许新增候选书架
+3. 何时允许某个主书架长出更细的子层级
+4. 激活状态和阶段状态如何映射成 master.md 和 by-topic 的具体写入策略
+
+已在本文档中完成：
+
+- ~~`_index/by-topic/` 的文件结构~~（见"by-topic 设计方向"）
+- ~~compile 如何为新来源分配主书架~~（见"Compile 归类协议"）
+- ~~compile 如何检测书架激活阈值并自动注册~~（见"激活规则"+"归类协议第三层"）
+- ~~quickCompile / 深度 compile 的职责边界~~（见"Compile 代码分工"）
+- ~~source frontmatter contract~~（见"Source Frontmatter Contract"）
+- ~~quickCompile prompt 设计与输入上下文最小集~~（见"quickCompile Prompt 设计"）
+- ~~深度 compile 聚合流程与读取策略~~（见"深度 Compile 聚合设计"）
+- ~~compile 如何触发书架页从阶段一到阶段二的过渡~~（见"聚合流程第 3 步"）
+- ~~Recent Activity 的自动维护机制~~（见"Recent Activity 治理规则"+"聚合流程第 4 步"）
+
+## Compile 归类协议
+
+### 核心原则
+
+Compile 归类的目标不是"尽快分类完整"，而是：
+
+- 保守归类，优先保证误归类少
+- 允许 source 暂时处于"已编译但未归架"状态
+- 先归 source，再评估 shelf——不是先定 shelf 再硬塞 source
+
+### 三层归类流程
+
+#### 第一层：Source 级判断——这篇 source 在说什么
+
+这一层不回答"它属于哪个书架"，只回答 source 本身的内容特征。
+
+输出结构：
+
+```json
+{
+  "source_path": "sources/...",
+  "primary_subject": "harness design for long-running AI agents",
+  "secondary_subjects": ["evaluator loops", "tool use discipline"],
+  "source_type": "engineering_practice",
+  "confidence": "high",
+  "candidate_shelves": [
+    {
+      "name": "AI Agent Systems",
+      "confidence": "high",
+      "reason": "Focuses on harnesses, evaluator loops, and agent engineering practice."
+    },
+    {
+      "name": "GitHub Projects",
+      "confidence": "low",
+      "reason": "Mentions an open-source implementation, but the main subject is not the project itself."
+    }
+  ],
+  "recommended_shelf": "AI Agent Systems"
+}
+```
+
+关键规则：
+
+- 每篇 source 只有一个 `recommended_shelf`，但可以保留多个 `candidate_shelves`
+- `candidate_shelves` 可以为空列表——如果没有足够强信号支撑任何书架
+- `recommended_shelf` 可以为 `null`——source 进入"已编译但未归架"状态
+
+#### 第二层：Shelf 候选判断——它最可能支持哪个书架
+
+**可以直接归入某候选书架的情况**：
+
+- 主题非常明确，与该书架的职责边界高度吻合
+- 不主要依赖来源形态判断
+
+例如：
+
+- 讲 harness / evaluator loop / agent engineering 实践 → AI Agent Systems
+- 讲 model training / benchmark / reasoning behavior → LLM Models
+
+**不应该直接归入某书架的情况**：
+
+- 只是来源长得像某类东西
+- 同时落在两个书架边界上，且无法分出主次
+- 内容太稀薄，只能看出来源对象，不能看出知识主题
+
+#### 第三层：Shelf 激活判断——候选书架是否已成为有效导航区
+
+这是跨多篇 source 的聚合判断，不是单篇 source 的属性。
+
+判断依据：
+
+- 数量门槛（见"激活规则"）
+- 主题集中度
+- 是否已出现 concept / map 候选
+- 对 query 是否已形成可导航入口
+
+### 归类判据规则
+
+#### 强信号（可独立决定书架归属）
+
+- `primary_subject` 与某书架职责边界直接吻合
+- 这种吻合体现在标题、摘要或核心段落，而不是零散提及
+- source 使用了该书架已有的 concept / 术语体系
+- source 能直接支撑该书架已知 gap
+
+#### 弱信号（可辅助判断，不能单独决定）
+
+- 作者或机构背景（如 Anthropic 的文章大概率 AI 相关，但可能讲的是 model 而非 agent）
+- 顺带提及某书架术语，但不以此为主题
+- 与某书架近期 activity 有时间关联
+
+#### 禁用信号（不能作为归类依据）
+
+- URL 域名或来源形态（github.com ≠ GitHub Projects，arxiv.org ≠ LLM Models）
+- 文件格式（PDF ≠ 学术论文 ≠ 任何特定书架）
+- 篇幅长短
+- 既有归类惯性（不能因"上一篇类似的归了这个书架"就自动跟随）
+
+#### 反向排除
+
+当某篇 source 对一个书架有弱或中等匹配，但对另一个书架有更直接、更排他的主题匹配时，应优先归入后者。
+
+例如：
+
+- 来自 Anthropic 但全文讲 benchmark 设计 → LLM Models，不是 AI Agent Systems
+- GitHub repo README 但核心讲 transformer 推理优化 → LLM Models，不是 GitHub Projects
+
+### 归类判断顺序
+
+1. 看内容主题（标题、摘要、核心段落），不看 URL 形态
+2. 判断是否能形成稳定的 `primary_subject`
+3. 生成 1 到 3 个 `candidate_shelves`（可以为空）
+4. 检查反向排除：是否存在更强的排他性匹配
+5. 只选 1 个 `recommended_shelf`（可以为 null）
+6. 后续聚合时再决定该书架是否激活
+
+### 特殊书架规则：GitHub Projects
+
+GitHub Projects 不是"来自 GitHub 的内容区"，而是"以项目为研究对象的内容区"。
+
+准入条件：
+
+- source 的主要对象是某个具体项目的架构、演进、实现选择、维护实践
+- 如果 source 讨论的是从项目中抽象出的通用方法论，应优先归入对应学科书架（如 AI Agent Systems、LLM Models）
+
+### 未归架状态
+
+- 如果没有足够强信号支撑任何书架，`candidate_shelves` 为空，source 保持"已编译但未归架"
+- 这不是错误，是正常状态
+- 未归架 source 的用途：
+  - 作为"是否需要新候选书架"的信号——当多篇未归架 source 共享相似主题时，可能意味着需要新书架
+  - 作为现有书架边界调整的信号
+  - lint 应定期检查未归架 source，报告聚类趋势
+
+### Compile 代码分工
+
+#### quickCompile
+
+职责只到 source 级，不做书架激活。
+
+负责：
+
+- 生成 `sources/<slug>.md`（source summary + 归类 frontmatter）
+- 对单篇 source 做内容理解
+- 产出归类元信息（primary_subject、source_type、candidate_shelves、recommended_shelf）
+- 如果没有足够强信号，recommended_shelf = null
+
+不负责：
+
+- 激活书架
+- 生成或更新 by-topic 文件
+- 维护 Recent Activity
+
+代码位置：沿用 `src/commands/compile.ts` 现有 quick compile 逻辑。
+
+#### 深度 compile
+
+职责是跨篇聚合与目录生长。
+
+负责：
+
+- 扫描所有 `wiki/sources/*.md` 的 frontmatter，汇总归类元信息
+- 判断候选书架是否满足激活判据
+- 生成或更新 `_index/master.md`
+- 生成或更新 `_index/by-topic/<slug>.md`
+- 判断书架处于阶段一还是阶段二
+- 维护 Recent Activity
+- 维护结构性 Gaps
+
+代码位置：沿用 `src/commands/compile.ts` 现有 deep compile 逻辑。
+
+#### index-updater.ts
+
+`src/pipeline/index-updater.ts` 当前负责 master.md 维护，后续扩展为同时负责：
+
+- 更新 `_index/master.md`
+- 写入 `_index/by-topic/*.md`
+
+第一版不拆分模块，避免过度重构。
+
+#### 关键实现原则
+
+- quickCompile 写"判断结果"（source frontmatter 里的归类元信息）
+- 深度 compile 写"结构结果"（index 文件里的目录结构）
+- 这两层不要混：source 文件记录"这篇看起来像哪个书架"，index 文件记录"哪些书架已成为正式导航入口"
+
+### Source Frontmatter Contract
+
+归类元信息写入每篇 `sources/*.md` 的 YAML frontmatter。
+
+#### 必填字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `kind` | string | 固定为 `source` |
+| `title` | string | source summary 的标题 |
+| `source_type` | string | 单篇来源的内容类型（不直接决定书架） |
+| `primary_subject` | string | 这篇 source 的主要主题描述 |
+| `candidate_shelves` | string[] | 候选书架名称列表，可为空 |
+| `recommended_shelf` | string \| null | 推荐书架，可为 null |
+| `unassigned` | boolean | 是否处于"已编译但未归架"状态 |
+
+#### 可选字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `shelf_confidence` | string | `high` \| `medium` \| `low` |
+| `classification_reason` | string | 一句简短解释，方便 debug 和 lint |
+
+#### source_type 枚举
+
+第一版控制在少量稳定值：
+
+- `engineering_practice`
+- `technical_report`
+- `paper`
+- `discussion`
+- `project_documentation`
+- `market_note`
+- `design_reference`
+- `other`
+
+此字段帮助理解 source，不直接决定书架归属。
+
+#### candidate_shelves 格式
+
+第一版使用字符串数组，不使用嵌套对象：
+
+```yaml
+candidate_shelves:
+  - AI Agent Systems
+  - GitHub Projects
+recommended_shelf: AI Agent Systems
+```
+
+原因：YAML 复杂度低、frontmatter 不会变重、deep compile 第一版不需要更细粒度。如果后续确实需要 per-shelf confidence 和 reason，再升级为对象数组。
+
+#### 一致性规则
+
+1. 如果 `recommended_shelf` 为 null → `unassigned` 必须为 `true`
+2. 如果 `recommended_shelf` 非空 → `unassigned` 必须为 `false`，且 `recommended_shelf` 应出现在 `candidate_shelves` 中
+3. `candidate_shelves` 可以为空列表，这是合法状态
+
+#### 完整示例
+
+已归架：
+
+```yaml
+---
+kind: source
+title: Harness Design for Long-running Application Development
+source_type: engineering_practice
+primary_subject: harness design for long-running ai agents
+candidate_shelves:
+  - AI Agent Systems
+  - GitHub Projects
+recommended_shelf: AI Agent Systems
+unassigned: false
+shelf_confidence: high
+classification_reason: The source focuses on harness design, evaluator loops, and agent engineering practice; the repository/project context is secondary.
+---
+```
+
+未归架：
+
+```yaml
+---
+kind: source
+title: Miscellaneous Notes on Tooling
+source_type: discussion
+primary_subject: mixed notes on developer tooling and workflows
+candidate_shelves: []
+recommended_shelf: null
+unassigned: true
+shelf_confidence: low
+classification_reason: No single bookshelf has enough strong signals; the source remains compiled but unassigned.
+---
+```
+
+### quickCompile Prompt 设计
+
+#### 目标
+
+输入单篇 `markdown/*.md`，输出一篇 `wiki/sources/<slug>.md`，包含稳定 frontmatter 和可读的 source summary body。
+
+#### 输出结构
+
+quickCompile 要求模型同时产出两部分：
+
+1. **frontmatter**：按 Source Frontmatter Contract 生成结构化归类
+2. **body**：人类和 query 可读的 source summary
+
+body 建议结构：
+
+```md
+# Summary
+
+...
+
+# Key Points
+
+- ...
+- ...
+
+# References
+
+- Original markdown: [[markdown/source-slug]]
+- Original URL: https://... (if available)
+```
+
+References 的最低要求：必须包含指向原始 `markdown/` 来源路径的链接。如果原始 URL 可得（如 ingest 时记录），也应补充。这不是占位节——后续 query 和 deep compile 回读时需要区分"原始来源"与"编译产物路径"。
+
+重点不是 body 的章节名字，而是 frontmatter 必须可预测、稳定、易解析。
+
+#### Prompt 约束
+
+quickCompile prompt 应明确要求模型：
+
+- 先理解这篇 source 的主要主题
+- 按 Source Frontmatter Contract 生成 frontmatter
+- 保守归类：`recommended_shelf: null` 是合法且鼓励的保守输出
+- 不允许用 URL 域名、文件格式、篇幅长短来决定书架
+- `candidate_shelves` 最多 3 个
+- `recommended_shelf` 最多 1 个
+- `classification_reason` 必须短，聚焦主题，不复述全文
+
+#### 防漂规则
+
+1. **`primary_subject` 必须是一句话主题，不是标签列表**
+   - 对：`harness design for long-running ai agents`
+   - 不对：`agents, harness, evaluation, github, workflow`
+
+2. **`candidate_shelves` 只能列主题区，不列"看起来像"**
+   - 不能仅因 source 来自 github.com 就列 GitHub Projects
+
+3. **`classification_reason` 只解释归类，不解释内容摘要**
+
+#### 输入上下文最小集
+
+quickCompile 的上下文应服务 3 个判断：这篇 source 的 primary_subject 是什么、是否与某书架职责边界直接吻合、是否足够强到推荐 recommended_shelf。
+
+**默认输入**（每次必给）：
+
+| 输入 | 用途 |
+|------|------|
+| 当前 source 的 markdown 全文 | 主体内容 |
+| SCHEMA.md 中的候选书架职责边界片段 | 归类映射的唯一权威源 |
+
+SCHEMA.md 是候选书架定义的唯一真相源。quickCompile 从 SCHEMA.md 中提取候选书架职责边界片段作为输入，不另外维护独立的摘要文件。这避免双真相源导致的不一致。
+
+提取的片段应为精简格式：
+
+```
+- AI Agent Systems: agent architecture, harnesses, workflows, tool use, evaluation loops, engineering practice
+- LLM Models: training, alignment, inference, reasoning, benchmarks, capabilities
+- Trading: stock trading, strategy, execution, market structure, risk management
+- Design: UI/UX, web design, interaction patterns, visual systems, frontend experience
+- GitHub Projects: specific project architecture, evolution, implementation choices, maintenance practice
+```
+
+如果 SCHEMA.md 的格式变化，提取逻辑应随之调整，但不要另建一份手写摘要。
+
+**条件输入**（有帮助但不默认全量给）：
+
+| 输入 | 条件 | 用途 |
+|------|------|------|
+| 已激活书架列表 | 存在已激活书架时 | 弱辅助，让模型知道哪些区是活的 |
+| 核心 concept 术语表 | 已有 concepts 时 | 识别术语体系关联（只给名称列表，不给整篇） |
+| 极简 gaps 摘要 | 已有 gaps 时 | 识别"source 能否直接支撑某个 gap" |
+
+**不输入**：
+
+| 不给 | 原因 |
+|------|------|
+| 全量 master.md | 含 Recent Activity / query protocol，对单篇归类帮助有限，可能制造归类惯性 |
+| by-topic/*.md 全文 | 深度结构层，不是单篇必需上下文 |
+| 其他 source summaries | 避免"参考已有风格"放大历史错误 |
+
+#### Prompt 构造顺序
+
+```
+1. 任务说明（你是 quickCompile，目标是...）
+2. Source Frontmatter Contract（必填/可选字段定义）
+3. 候选书架职责边界摘要
+4. [可选] 已激活书架核心术语 / Gaps 摘要
+5. Source markdown 内容
+```
+
+模型先按协议思考，再看原文。
+
+### 深度 Compile 聚合设计
+
+#### 核心原则
+
+深度 compile 不是重新读全库做一次大脑，而是先读结构化归类结果，再在必要时回读正文。它是"聚合器"，不是第二个自由问答 agent。
+
+#### 最小读取集
+
+**第一层：默认只读 frontmatter**
+
+每篇 `sources/*.md` 读取以下字段：
+
+- `title`、`source_type`、`primary_subject`
+- `candidate_shelves`、`recommended_shelf`
+- `unassigned`、`shelf_confidence`、`classification_reason`
+
+这是聚合的主输入。
+
+**第二层：按需回读 body**
+
+只在以下情况回读正文摘要：
+
+- 某个书架边界模糊，需要更多证据
+- 同一书架下的 `primary_subject` 看起来发散
+- 某 source 的 `recommended_shelf` 和聚合趋势冲突
+- 准备抽 concept / map，但 frontmatter 不够支撑
+
+body 不是默认输入，而是冲突解决材料。
+
+#### 聚合流程（4 步）
+
+**第 1 步：收集 source 状态**
+
+将所有 source 分为三类：
+
+1. **已归架**：`recommended_shelf != null`
+2. **未归架**：`unassigned = true`
+3. **异常状态**：frontmatter 不一致、`recommended_shelf` 不在 `candidate_shelves` 中、缺字段
+
+先做健康检查，再做结构生长。
+
+**第 2 步：按 recommended_shelf 聚合**
+
+对每个候选书架统计：
+
+- 归到该书架的 sources 数量
+- `primary_subject` 的收敛程度
+- `source_type` 分布（仅作描述性统计和辅助分析，不可单独触发书架激活或升级）
+- 是否已出现稳定 concept 候选
+- 是否已出现可写成 map 的材料
+
+建议中间数据结构：
+
+```typescript
+type ShelfAggregate = {
+  shelf: string
+  sourceCount: number
+  sourcePaths: string[]
+  primarySubjects: string[]
+  sourceTypes: string[]
+  unassignedRelatedCount: number
+  hasConceptCandidates: boolean
+  hasMapCandidates: boolean
+  activationStatus: 'inactive' | 'active_stage1' | 'active_stage2' | 'degrading'
+  notes: string[]
+}
+```
+
+**第 3 步：判断生命周期状态**
+
+每个候选书架进入以下状态之一：
+
+| 状态 | 含义 |
+|------|------|
+| `inactive` | 未达到激活条件 |
+| `active_stage1` | 已激活，扁平书架页，无稳定 concepts/maps |
+| `active_stage2` | 已激活，具备四卡片结构条件 |
+| `degrading` | 可能需要从 master.md 移除，暂不自动执行 |
+
+激活判断（inactive → active_stage1）：
+
+1. 有足够数量的 `recommended_shelf == 该书架` 的 source
+2. 这些 source 的 `primary_subject` 明显围绕同一主题区
+3. 不只是来源形态相似
+4. 多篇 source 能支持一段一致的书架简介，且至少存在一组核心 source 可直接列入阶段一书架页
+
+阶段升级判断（active_stage1 → active_stage2）：
+
+1. 已出现可独立成文的 concept 或 map 候选
+2. source 不再只是若干平行摘要，而是已能形成高层组织
+
+**第 4 步：写目录结果**
+
+根据状态更新：
+
+- `_index/master.md`（只含 active 书架）
+- `_index/by-topic/<slug>.md`（阶段一或阶段二模板）
+- Recent Activity（只记录结构性变化）
+- shelf-level Gaps
+
+#### 未归架 source 在聚合中的作用
+
+未归架 source 不被忽略，参与两个判断：
+
+1. 是否提示"存在新候选书架趋势"（多篇未归架 source 共享相似主题）
+2. 是否提示"现有书架边界需要调整"
+
+但它们不直接进入 master.md，是结构信号而非导航入口。
+
+#### 深度 compile 不回写 source frontmatter
+
+深度 compile 不应因聚合需要而反过来重写单篇 source 的 `recommended_shelf`。
+
+原因：
+
+- frontmatter 不再是稳定接口
+- compile 结果会不断回流覆盖 quickCompile 的原判断
+
+如果确实需要修正某篇 source 的归类，应走显式修正步骤（如 lint 建议 + 人工确认），而不是聚合时偷偷改。
 
 ## `_index/by-topic/` 设计方向
 
