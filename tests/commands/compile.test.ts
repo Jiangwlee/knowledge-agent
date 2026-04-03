@@ -90,11 +90,20 @@ Summary of the test article.
 
     await quickCompile(markdownPath, {});
 
-    // Verify Pi was called
+    // Verify Pi was called with agent + skills (not hardcoded prompt)
     expect(mockSpawn).toHaveBeenCalledOnce();
     const [cmd, args] = mockSpawn.mock.calls[0];
     expect(cmd).toBe('pi');
     expect(args).toContain('--no-session');
+
+    // Verify librarian agent is loaded as a skill
+    const skillFlags = (args as string[]).filter((a, i) => (args as string[])[i - 1] === '--skill');
+    expect(skillFlags).toContain('agents/librarian.md');
+
+    // Verify prompt contains task data but not hardcoded architecture
+    const prompt = (args as string[])[(args as string[]).length - 1];
+    expect(prompt).toContain('test-article.md');
+    expect(prompt).toContain('Content here.');
 
     // Verify source summary was saved
     const sourcePath = join(testDir, 'wiki', 'sources', 'test-article.md');

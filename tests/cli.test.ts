@@ -56,13 +56,21 @@ describe('kb-agent CLI', () => {
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining('not yet implemented'));
   });
 
-  it('routes to query placeholder', async () => {
+  it('routes to query command', async () => {
+    const origDir = process.env.KB_AGENT_DATA_DIR;
+    process.env.KB_AGENT_DATA_DIR = '/tmp/kb-nonexistent-' + Date.now();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     await main(['node', 'kb-agent', 'query', 'what is AI?']);
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('not yet implemented'));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('init'));
+    process.env.KB_AGENT_DATA_DIR = origDir;
   });
 
-  it('routes to chat placeholder', async () => {
+  it('routes to chat command', async () => {
+    const origDir = process.env.KB_AGENT_DATA_DIR;
+    process.env.KB_AGENT_DATA_DIR = '/tmp/kb-nonexistent-' + Date.now();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     await main(['node', 'kb-agent', 'chat']);
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('not yet implemented'));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('init'));
+    process.env.KB_AGENT_DATA_DIR = origDir;
   });
 });

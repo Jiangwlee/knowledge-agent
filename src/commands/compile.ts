@@ -14,41 +14,23 @@ import { updateMasterIndex } from '../pipeline/index-updater.js';
 /**
  * Quick compile: single markdown source → wiki/sources/ summary + index update.
  * Called automatically after ingest.
+ *
+ * The librarian agent (loaded via preset) provides wiki architecture knowledge.
+ * The compile skill provides output format requirements.
+ * This function only passes the task-specific data as the prompt.
  */
 export async function quickCompile(markdownPath: string, opts: GlobalOptions): Promise<void> {
   const wikiDir = getSubDir('wiki');
-  const schemaPath = join(wikiDir, 'SCHEMA.md');
-  const masterIndexPath = join(wikiDir, '_index', 'master.md');
-
-  // Read context files
-  const schema = existsSync(schemaPath) ? readFileSync(schemaPath, 'utf-8') : '';
-  const masterIndex = existsSync(masterIndexPath) ? readFileSync(masterIndexPath, 'utf-8') : '';
   const markdownContent = readFileSync(markdownPath, 'utf-8');
   const sourceFilename = basename(markdownPath, '.md');
 
-  // Build prompt for Pi
-  const prompt = `你是图书管理员。以下是一篇新导入的文章，请为它生成一份 wiki/sources/ 摘要。
+  // Prompt only contains the task and data — architecture/rules come from agent + skill
+  const prompt = `Quick compile: generate a wiki/sources/ summary for the following article.
 
-## 当前 Wiki 结构
-${schema}
+File: ${sourceFilename}.md
+Output to: wiki/sources/${sourceFilename}.md
 
-## 当前索引
-${masterIndex}
-
-## 新文章（文件名: ${sourceFilename}.md）
-${markdownContent}
-
-## 任务
-为这篇文章生成一份 Obsidian 兼容的摘要文件，用于 wiki/sources/${sourceFilename}.md。
-
-要求：
-1. YAML frontmatter（title, source, tags, date）
-2. 简洁但全面的内容摘要
-3. 关键要点列表
-4. 使用 [[wikilinks]] 链接相关概念
-5. 保持来源归属
-
-直接输出摘要文件的完整内容，不要添加额外解释。`;
+${markdownContent}`;
 
   const preset = getPreset('compile');
   const runOptions = resolveRunOptions(preset, {

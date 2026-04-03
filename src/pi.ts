@@ -8,6 +8,7 @@
 
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { buildPresetArgs } from './presets.js';
 
 export interface RunAgentOptions {
   /** The prompt to send to Pi */
@@ -36,6 +37,10 @@ export interface RunAgentResult {
 /**
  * Build the CLI argument array for the pi command.
  */
+/**
+ * Build the CLI argument array for pi in print mode.
+ * Reuses buildPresetArgs for shared flags, adds print-mode specifics.
+ */
 function buildArgs(options: RunAgentOptions): string[] {
   const args: string[] = ['--no-session', '-p'];
   const mode = options.mode ?? 'text';
@@ -44,23 +49,13 @@ function buildArgs(options: RunAgentOptions): string[] {
     args.push('--mode', 'json');
   }
 
-  if (options.model) {
-    args.push('--model', options.model);
-  }
-
-  if (options.tools && options.tools.length > 0) {
-    args.push('--tools', options.tools.join(','));
-  }
-
-  if (options.skills) {
-    for (const skill of options.skills) {
-      args.push('--skill', skill);
-    }
-  }
-
-  if (options.thinking) {
-    args.push('--thinking', options.thinking);
-  }
+  // Shared: model, tools, skills, thinking
+  const preset = {
+    skills: options.skills ?? [],
+    tools: options.tools ?? [],
+    thinking: options.thinking ?? '',
+  };
+  args.push(...buildPresetArgs(preset, { model: options.model }));
 
   if (options.systemPrompt) {
     args.push('--system-prompt', options.systemPrompt);

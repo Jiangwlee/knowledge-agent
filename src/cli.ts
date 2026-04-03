@@ -85,7 +85,6 @@ function createProgram(): Command {
     .command('chat')
     .description('Interactive chat with the knowledge base (Pi TUI)')
     .option('--model <model>', 'LLM model override')
-    .option('--mode <mode>', 'Pi output mode: text / stream / json / interactive', 'interactive')
     .action(async (opts: GlobalOptions) => {
       await chatCommand(opts);
     });

@@ -1,7 +1,7 @@
 // tests/presets.test.ts — Subcommand preset configuration tests
 
 import { describe, it, expect } from 'vitest';
-import { getPreset, resolveRunOptions, PRESETS } from '../src/presets.js';
+import { getPreset, resolveRunOptions, buildPresetArgs, PRESETS } from '../src/presets.js';
 
 describe('PRESETS', () => {
   it('has presets for all subcommands', () => {
@@ -78,5 +78,33 @@ describe('resolveRunOptions', () => {
   it('uses preset thinking when no CLI override', () => {
     const options = resolveRunOptions(PRESETS.compile, { prompt: 'test' });
     expect(options.thinking).toBe(PRESETS.compile.thinking);
+  });
+});
+
+describe('buildPresetArgs', () => {
+  it('builds args with model, tools, skills, and thinking', () => {
+    const preset = PRESETS.query;
+    const args = buildPresetArgs(preset, { model: 'anthropic/claude-sonnet-4-6' });
+
+    expect(args).toContain('--model');
+    expect(args).toContain('anthropic/claude-sonnet-4-6');
+    expect(args).toContain('--tools');
+    expect(args).toContain('--thinking');
+
+    // Each skill gets its own --skill flag
+    for (const skill of preset.skills) {
+      expect(args).toContain(skill);
+    }
+  });
+
+  it('omits --model when not provided', () => {
+    const args = buildPresetArgs(PRESETS.query);
+    expect(args).not.toContain('--model');
+  });
+
+  it('does not include print-mode flags', () => {
+    const args = buildPresetArgs(PRESETS.compile, { model: 'test' });
+    expect(args).not.toContain('--no-session');
+    expect(args).not.toContain('-p');
   });
 });

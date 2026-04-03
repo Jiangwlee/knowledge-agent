@@ -5,7 +5,7 @@ description: >-
   maintenance of a structured wiki built from raw sources. Equipped with
   different skills depending on the task at hand.
 tools: bash, read, write
-model: claude-sonnet-4-6
+model: github-copilot/gpt-5.4
 ---
 
 # Role

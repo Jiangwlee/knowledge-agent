@@ -13,31 +13,36 @@ export interface Preset {
   tools: string[];
   /** Default thinking level */
   thinking: string;
+  /** Default model for this subcommand (optional, overridden by --model CLI flag) */
+  model?: string;
 }
+
+/** Base agent loaded as the first skill in every preset */
+const AGENT = 'agents/librarian.md';
 
 export const PRESETS: Record<string, Preset> = {
   ingest: {
-    skills: ['skills/ingest/SKILL.md', 'skills/compile/SKILL.md'],
+    skills: [AGENT, 'skills/ingest/SKILL.md', 'skills/compile/SKILL.md'],
     tools: ['read', 'write', 'bash', 'grep', 'ls'],
     thinking: 'medium',
   },
   compile: {
-    skills: ['skills/compile/SKILL.md', 'skills/search/SKILL.md'],
+    skills: [AGENT, 'skills/compile/SKILL.md', 'skills/search/SKILL.md'],
     tools: ['read', 'write', 'bash', 'grep', 'ls'],
     thinking: 'high',
   },
   query: {
-    skills: ['skills/search/SKILL.md'],
+    skills: [AGENT, 'skills/search/SKILL.md'],
     tools: ['read', 'grep', 'find', 'ls'],
     thinking: 'medium',
   },
   lint: {
-    skills: ['skills/lint/SKILL.md', 'skills/search/SKILL.md'],
+    skills: [AGENT, 'skills/lint/SKILL.md', 'skills/search/SKILL.md'],
     tools: ['read', 'grep', 'find', 'ls'],
     thinking: 'high',
   },
   chat: {
-    skills: ['skills/search/SKILL.md', 'skills/compile/SKILL.md'],
+    skills: [AGENT, 'skills/search/SKILL.md', 'skills/compile/SKILL.md'],
     tools: ['read', 'write', 'bash', 'grep', 'ls'],
     thinking: 'medium',
   },
@@ -70,7 +75,35 @@ export function resolveRunOptions(preset: Preset, overrides: CliOverrides): RunA
     skills: preset.skills,
     tools: preset.tools,
     thinking: preset.thinking,
-    model: overrides.model,
+    model: overrides.model ?? preset.model,
     mode: overrides.mode,
   };
+}
+
+/**
+ * Build common Pi CLI args from a preset and optional model override.
+ * Handles: --model, --tools, --skill (repeated), --thinking.
+ * Does NOT add print-mode flags (--no-session, -p) or prompt — callers add those.
+ */
+export function buildPresetArgs(preset: Preset, opts?: { model?: string }): string[] {
+  const args: string[] = [];
+
+  const model = opts?.model ?? preset.model;
+  if (model) {
+    args.push('--model', model);
+  }
+
+  if (preset.tools.length > 0) {
+    args.push('--tools', preset.tools.join(','));
+  }
+
+  for (const skill of preset.skills) {
+    args.push('--skill', skill);
+  }
+
+  if (preset.thinking) {
+    args.push('--thinking', preset.thinking);
+  }
+
+  return args;
 }

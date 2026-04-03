@@ -8,14 +8,29 @@ description: >-
 
 # Search
 
-Navigate the wiki using layered index loading.
+Navigate the wiki using layered index loading to find and synthesize information.
 
-## Strategy
+## Navigation Strategy
 
-1. Read `_index/master.md` for global overview
-2. Follow topic indexes to narrow scope
-3. Read specific sources/concepts/maps as needed
+Follow this hierarchy — never scan all files blindly:
 
-## Implementation
+1. **Read `_index/master.md`** — get the global overview, topic list, recent sources
+2. **Follow topic indexes** — if `_index/by-topic.md` or similar exists, use it to narrow scope
+3. **Read specific articles** — open `sources/`, `concepts/`, or `maps/` files as needed
+4. **Cross-reference** — follow `[[wikilinks]]` within articles to find related content
 
-Phase 3.
+## Answering Questions
+
+When answering a user query:
+
+1. Navigate to relevant articles using the strategy above
+2. Synthesize information from multiple sources when applicable
+3. **Always cite sources** — reference the wiki articles you drew from: `[[sources/article-name]]`
+4. **Distinguish fact from inference** — if the wiki doesn't contain enough information, say so explicitly
+5. **Never fabricate** — only state what the sources support
+
+## Output Format
+
+- Use Obsidian-compatible markdown
+- Cite with `[[wikilinks]]` to the articles you referenced
+- Be concise but complete — the user asked a specific question, answer it directly
