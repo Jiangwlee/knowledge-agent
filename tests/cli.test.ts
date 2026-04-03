@@ -47,13 +47,21 @@ describe('kb-agent CLI', () => {
   });
 
   it('routes to compile command', async () => {
+    const origDir = process.env.KB_AGENT_DATA_DIR;
+    process.env.KB_AGENT_DATA_DIR = '/tmp/kb-nonexistent-' + Date.now();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     await main(['node', 'kb-agent', 'compile']);
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('not yet implemented'));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('init'));
+    process.env.KB_AGENT_DATA_DIR = origDir;
   });
 
-  it('routes to lint placeholder', async () => {
+  it('routes to lint command', async () => {
+    const origDir = process.env.KB_AGENT_DATA_DIR;
+    process.env.KB_AGENT_DATA_DIR = '/tmp/kb-nonexistent-' + Date.now();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     await main(['node', 'kb-agent', 'lint']);
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('not yet implemented'));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('init'));
+    process.env.KB_AGENT_DATA_DIR = origDir;
   });
 
   it('routes to query command', async () => {

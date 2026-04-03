@@ -62,7 +62,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-import { quickCompile } from '../../src/commands/compile.js';
+import { quickCompile, compileCommand } from '../../src/commands/compile.js';
 
 describe('quickCompile', () => {
   it('sends markdown content to Pi and saves source summary', async () => {
@@ -153,5 +153,87 @@ Summary of the test article.
     const args = mockSpawn.mock.calls[0][1] as string[];
     expect(args).toContain('--model');
     expect(args).toContain('openai/gpt-4o');
+  });
+});
+
+describe('compileCommand (deep)', () => {
+  it('skips when no new sources since last compile', async () => {
+    // Set lastDeepCompile to future so all sources are "old"
+    writeFileSync(join(testDir, 'config.json'), JSON.stringify({
+      version: '0.1.0',
+      createdAt: '2026-04-01T00:00:00.000Z',
+      lastDeepCompile: '2099-01-01T00:00:00.000Z',
+    }), 'utf-8');
+
+    await compileCommand({});
+
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Nothing to do'));
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it('processes new sources and calls Pi with compile preset', async () => {
+    // Add a source file (no lastDeepCompile → all sources are new)
+    writeFileSync(join(testDir, 'wiki', 'sources', 'new-article.md'), '# New\n\nContent.', 'utf-8');
+    writeFileSync(join(testDir, 'config.json'), JSON.stringify({
+      version: '0.1.0',
+      createdAt: '2026-04-01T00:00:00.000Z',
+    }), 'utf-8');
+
+    mockSpawn.mockReturnValue(createMockProcess('Created concepts/ai-overview.md'));
+
+    await compileCommand({});
+
+    expect(mockSpawn).toHaveBeenCalledOnce();
+    const [cmd, args] = mockSpawn.mock.calls[0];
+    expect(cmd).toBe('pi');
+
+    // Prompt should mention new sources
+    const prompt = (args as string[])[(args as string[]).length - 1];
+    expect(prompt).toContain('new-article');
+
+    // Verify cwd set to wiki dir
+    const spawnOpts = mockSpawn.mock.calls[0][2] as any;
+    expect(spawnOpts.cwd).toBe(join(testDir, 'wiki'));
+  });
+
+  it('records lastDeepCompile timestamp after success', async () => {
+    writeFileSync(join(testDir, 'wiki', 'sources', 'some-source.md'), '# Source\n\nContent.', 'utf-8');
+    writeFileSync(join(testDir, 'config.json'), JSON.stringify({
+      version: '0.1.0',
+      createdAt: '2026-04-01T00:00:00.000Z',
+    }), 'utf-8');
+
+    mockSpawn.mockReturnValue(createMockProcess('Done.'));
+
+    await compileCommand({});
+
+    const config = JSON.parse(readFileSync(join(testDir, 'config.json'), 'utf-8'));
+    expect(config.lastDeepCompile).toBeDefined();
+    expect(new Date(config.lastDeepCompile).getTime()).toBeGreaterThan(0);
+  });
+
+  it('does not record timestamp when LLM returns empty output', async () => {
+    writeFileSync(join(testDir, 'wiki', 'sources', 'empty-test.md'), '# Empty\n\nContent.', 'utf-8');
+    writeFileSync(join(testDir, 'config.json'), JSON.stringify({
+      version: '0.1.0',
+      createdAt: '2026-04-01T00:00:00.000Z',
+    }), 'utf-8');
+
+    mockSpawn.mockReturnValue(createMockProcess(''));
+
+    await compileCommand({});
+
+    const config = JSON.parse(readFileSync(join(testDir, 'config.json'), 'utf-8'));
+    expect(config.lastDeepCompile).toBeUndefined();
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('empty output'));
+  });
+
+  it('reports error when knowledge base is not initialized', async () => {
+    process.env.KB_AGENT_DATA_DIR = join(testDir, 'nonexistent');
+
+    await compileCommand({});
+
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('init'));
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 });

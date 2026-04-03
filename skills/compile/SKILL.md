@@ -58,4 +58,98 @@ The paper introduces the Transformer architecture...
 
 ## Deep Compile（深度编译）
 
-Phase 4. Cross-source synthesis → `concepts/` + `maps/` + `_index/` updates.
+Cross-source synthesis. You have full write access to the wiki — create, update, and reorganize as needed.
+
+### What You Do
+
+1. **Read `_index/master.md`** to understand current state
+2. **Identify new/unprocessed sources** — sources in `sources/` that haven't been synthesized into concepts yet (check wikilink references)
+3. **Create or update `concepts/` articles** — synthesize knowledge across multiple sources into standalone concept articles
+4. **Create or update `maps/` articles** — high-level overviews, timelines, comparison tables that connect multiple concepts
+5. **Update `_index/`** — keep master.md, by-topic.md, and other indexes current
+6. **Update `SCHEMA.md`** — if the wiki's organizational structure has evolved, reflect it
+
+### Concepts (`concepts/`)
+
+A concept article synthesizes knowledge about **one topic** from **multiple sources**.
+
+```markdown
+---
+title: Transformer Architecture
+tags: [transformer, deep-learning, architecture]
+sources: [attention-is-all-you-need, bert-paper, gpt-overview]
+date: 2026-04-03
+---
+
+## Overview
+
+Brief definition and significance.
+
+## Key Ideas
+
+- Idea 1 — synthesized from [[sources/attention-is-all-you-need]] and [[sources/bert-paper]]
+- Idea 2 — ...
+
+## Related Concepts
+
+- [[self-attention]]
+- [[positional-encoding]]
+```
+
+Rules:
+- A concept must reference **at least 2 sources** — single-source knowledge stays in `sources/`
+- Always cite which sources support each claim
+- Use `[[wikilinks]]` liberally to connect concepts
+
+### Maps (`maps/`)
+
+A map provides a **bird's-eye view** across multiple concepts.
+
+Types:
+- **Topic overview** — "Map of Deep Learning Architectures"
+- **Timeline** — chronological progression of a field
+- **Comparison** — structured comparison table across approaches
+- **Learning path** — suggested reading order for a topic
+
+```markdown
+---
+title: Deep Learning Architectures Overview
+type: topic-overview
+tags: [deep-learning, architecture, map]
+date: 2026-04-03
+---
+
+## Landscape
+
+Brief overview of the field.
+
+## Architectures
+
+| Architecture | Key Innovation | Era | Sources |
+|---|---|---|---|
+| CNN | Spatial feature extraction | 2012 | [[sources/alexnet]] |
+| Transformer | Self-attention | 2017 | [[sources/attention-is-all-you-need]] |
+
+## Related Concepts
+
+- [[concepts/transformer-architecture]]
+- [[concepts/convolutional-networks]]
+```
+
+Rules:
+- Maps synthesize across **concepts**, not directly from sources
+- Always include links to the concepts and sources that inform the map
+
+### Incremental Strategy
+
+- Only process sources that are **new since last deep compile**
+- When updating existing concepts/maps, **extend** rather than rewrite — add new information, update dates
+- If a concept has grown too large, consider splitting it
+- If new sources reveal connections between existing concepts, create a new map
+
+### SCHEMA.md Maintenance
+
+After making structural changes, update `SCHEMA.md` to reflect:
+- New topic categories that have emerged
+- Changes to the organizational hierarchy
+- New conventions or patterns you've established

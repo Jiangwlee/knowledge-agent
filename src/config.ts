@@ -10,6 +10,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 export interface Config {
   version: string;
   createdAt: string;
+  /** ISO timestamp of last deep compile run */
+  lastDeepCompile?: string;
 }
 
 const DEFAULT_DATA_DIR = join(homedir(), '.local', 'share', 'kb-agent');

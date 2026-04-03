@@ -1,12 +1,12 @@
 // src/commands/compile.ts — Compile: transform markdown extractions into wiki knowledge
 //
 // Quick compile: single source → wiki/sources/ summary + index update (triggered by ingest)
-// Deep compile: cross-source synthesis → concepts/ + maps/ + _index/ (Phase 4)
+// Deep compile: LLM-autonomous cross-source synthesis → concepts/ + maps/ + _index/ (Phase 4)
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import type { GlobalOptions } from '../cli.js';
-import { getSubDir } from '../config.js';
+import { getSubDir, getConfigPath, readConfig, writeConfig } from '../config.js';
 import { runAgent } from '../pi.js';
 import { getPreset, resolveRunOptions } from '../presets.js';
 import { updateMasterIndex } from '../pipeline/index-updater.js';
@@ -62,8 +62,89 @@ ${markdownContent}`;
 }
 
 /**
- * Deep compile command (Phase 4).
+ * List source filenames that were added after the last deep compile.
+ * Returns all sources if no previous compile timestamp exists.
+ */
+function getNewSources(lastCompileTime: number): string[] {
+  const sourcesDir = join(getSubDir('wiki'), 'sources');
+  if (!existsSync(sourcesDir)) return [];
+
+  return readdirSync(sourcesDir)
+    .filter(f => f.endsWith('.md'))
+    .filter(f => {
+      const mtime = statSync(join(sourcesDir, f)).mtimeMs;
+      return mtime > lastCompileTime;
+    })
+    .map(f => basename(f, '.md'));
+}
+
+/**
+ * Deep compile command: LLM-autonomous cross-source synthesis.
+ *
+ * The LLM reads the current wiki state, identifies new/unprocessed sources,
+ * and creates/updates concepts, maps, indexes, and SCHEMA.md.
+ * Pi has write access to the wiki directory via tools.
  */
 export async function compileCommand(opts: GlobalOptions): Promise<void> {
-  console.log('compile: deep compile not yet implemented (Phase 4)');
+  const wikiDir = getSubDir('wiki');
+
+  if (!existsSync(wikiDir)) {
+    console.error('Knowledge base not initialized. Run `kb-agent init` first.');
+    return;
+  }
+
+  // Determine new sources since last compile
+  const config = readConfig();
+  const lastCompileTime = config?.lastDeepCompile
+    ? new Date(config.lastDeepCompile).getTime()
+    : 0;
+  const newSources = getNewSources(lastCompileTime);
+
+  if (newSources.length === 0) {
+    console.log('No new sources since last deep compile. Nothing to do.');
+    return;
+  }
+
+  console.log(`Deep compile: ${newSources.length} new source(s) to process.`);
+
+  // Build prompt with incremental context
+  const sourcesList = newSources.map(s => `- sources/${s}.md`).join('\n');
+  const prompt = `Deep compile: synthesize new sources into concepts, maps, and indexes.
+
+New sources since last compile:
+${sourcesList}
+
+Read these sources and the current wiki state (_index/master.md, SCHEMA.md, existing concepts/ and maps/).
+Then:
+1. Create or update concept articles in concepts/ for topics that span multiple sources
+2. Create or update maps in maps/ for high-level overviews
+3. Update _index/ to reflect all changes
+4. Update SCHEMA.md if the wiki structure has evolved
+
+Work incrementally — extend existing articles rather than rewriting them.`;
+
+  const preset = getPreset('compile');
+  const runOptions = resolveRunOptions(preset, {
+    prompt,
+    model: opts.model,
+    mode: opts.mode as 'text' | 'json' | undefined,
+  });
+  runOptions.cwd = wikiDir;
+
+  try {
+    const result = await runAgent(runOptions);
+
+    if (result.content.trim()) {
+      console.log(result.content.trim());
+
+      // Only record timestamp when LLM produced output
+      const currentConfig = readConfig() ?? { version: '0.1.0', createdAt: new Date().toISOString() };
+      writeConfig({ ...currentConfig, lastDeepCompile: new Date().toISOString() });
+      console.log('Deep compile complete. Timestamp recorded.');
+    } else {
+      console.error('Deep compile produced empty output. Timestamp not updated — will retry next run.');
+    }
+  } catch (err: any) {
+    console.error(`Deep compile failed: ${err.message || err}`);
+  }
 }

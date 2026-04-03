@@ -38,7 +38,7 @@ export const PRESETS: Record<string, Preset> = {
   },
   lint: {
     skills: [AGENT, 'skills/lint/SKILL.md', 'skills/search/SKILL.md'],
-    tools: ['read', 'grep', 'find', 'ls'],
+    tools: ['read', 'write', 'grep', 'find', 'ls'],
     thinking: 'high',
   },
   chat: {
