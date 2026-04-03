@@ -30,7 +30,9 @@ fail()    { printf '\033[31m[ERROR]\033[0m %s\n' "$1" >&2; exit 1; }
 # ── Mode detection ────────────────────────────────────────────────────────────
 
 detect_mode() {
-  if [[ "${BASH_SOURCE[0]:-/dev/stdin}" == "/dev/stdin" || -z "${BASH_SOURCE[0]:-}" ]]; then
+  local src="${BASH_SOURCE[0]:-}"
+  # curl | bash: src is empty, /dev/stdin, or /proc/self/fd/0
+  if [[ -z "$src" || "$src" == "/dev/stdin" || "$src" == /proc/self/fd/* ]]; then
     echo "remote"
   else
     echo "local"
