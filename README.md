@@ -23,6 +23,7 @@ kb-agent 通过四级数据管线处理知识：
 ## 文档
 
 - `docs/brainstorming/specs/2026-04-03-knowledge-agent-design.md` — 总体设计文档
+- `docs/knowledge-base-navigation-design.md` — 知识库导航设计（图书馆模型、书架与目录）
 - `docs/query-cli-primitives.md` — 查询原语设计：`nav / index / article / links / evidence`
 - `docs/karpathy-llm-wiki-workflow.md` — Karpathy 原帖与社区讨论整理
 - `docs/origin-idea.md` — 项目起源与差异化思考
