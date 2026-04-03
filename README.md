@@ -23,7 +23,7 @@ kb-agent 通过四级数据管线处理知识：
 ## 文档
 
 - `docs/brainstorming/specs/2026-04-03-knowledge-agent-design.md` — 总体设计文档
-- `docs/query-cli-primitives.md` — 查询原语设计：`nav / lookup / evidence / inspect`
+- `docs/query-cli-primitives.md` — 查询原语设计：`nav / index / article / links / evidence`
 - `docs/karpathy-llm-wiki-workflow.md` — Karpathy 原帖与社区讨论整理
 - `docs/origin-idea.md` — 项目起源与差异化思考
 
@@ -83,22 +83,19 @@ kb-agent init
 # 2. 查看知识库导航入口
 kb-agent nav
 
-# 3. 查找候选知识条目
-kb-agent lookup "harness agent"
-
-# 4. 读取单篇证据
+# 3. 读取单篇证据
 kb-agent evidence "sources/harness-design.md" --mode json
 
-# 5. 导入一篇文章
+# 4. 导入一篇文章
 kb-agent ingest https://example.com/interesting-article
 
-# 6. 导入文本（通过管道）
+# 5. 导入文本（通过管道）
 echo "一段有价值的笔记内容..." | kb-agent ingest --text
 
-# 7. 向知识库提问
+# 6. 向知识库提问
 kb-agent query "这篇文章的核心观点是什么？"
 
-# 8. 交互式对话
+# 7. 交互式对话
 kb-agent chat
 ```
 
@@ -152,22 +149,6 @@ kb-agent nav --mode json
 - 当前知识库是 `sources_only`、`has_concepts` 还是 `has_maps`
 - `sources / concepts / maps` 的数量
 
-### `kb-agent lookup <query>`
-
-根据 query 返回候选知识条目，按 `maps / concepts / sources` 分层输出。
-
-```bash
-kb-agent lookup "harness agent"
-
-# JSON 输出
-kb-agent lookup "harness agent" --mode json
-```
-
-适合在 query 前做候选召回和路径确认：
-- 优先看有没有 `maps` 或 `concepts`
-- 如果只命中 `sources`，说明知识层可能还不成熟
-- 为后续 `evidence` 和 LLM 综合回答提供输入
-
 ### `kb-agent evidence <path>`
 
 读取单篇 wiki 文章，并返回标准化证据。
@@ -179,7 +160,7 @@ kb-agent evidence "sources/harness-design.md"
 kb-agent evidence "sources/harness-design.md" --mode json
 ```
 
-适合在 lookup 之后做证据确认：
+适合在目录导航之后做证据确认：
 - 明确文章类型：`source / concept / map`
 - 读取规范化标题和摘要
 - 提取 `[[wikilinks]]`
@@ -208,10 +189,10 @@ kb-agent compile
 
 当前默认查询协议会优先走：
 - `kb-agent nav`
-- `kb-agent lookup`
+- 读取 `SCHEMA.md` 与 `_index/master.md`
 - `kb-agent evidence`
 
-只有当这些查询原语不足以覆盖问题时，才退回到更原始的文件级工具。
+如果目录结构无法引导到足够相关的材料，query 会将其视为知识库缺口，而不是把整个 wiki 当搜索引擎来扫描。
 
 ```bash
 kb-agent query "transformer 和 RNN 的主要区别是什么？"

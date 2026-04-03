@@ -2,7 +2,7 @@
 //
 // Read-only command that reports the wiki entry files, content counts,
 // and a coarse knowledge maturity signal. This gives agents and users
-// a stable starting point before lookup/evidence primitives exist.
+// a stable starting point for directory-guided query navigation.
 
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -96,4 +96,3 @@ export async function navCommand(opts: GlobalOptions): Promise<void> {
 
   printText(result);
 }
-

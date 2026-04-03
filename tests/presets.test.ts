@@ -32,6 +32,8 @@ describe('PRESETS', () => {
 
   it('query preset includes bash for query primitives', () => {
     expect(PRESETS.query.tools).toContain('bash');
+    expect(PRESETS.query.tools).not.toContain('grep');
+    expect(PRESETS.query.tools).not.toContain('find');
   });
 
   it('all presets have required fields', () => {

@@ -27,10 +27,12 @@ export async function queryCommand(question: string, opts: GlobalOptions): Promi
 
 Query protocol:
 1. Start with \`kb-agent nav\`
-2. Then run \`kb-agent lookup "<question>" --mode json\`
-3. Then run \`kb-agent evidence "<path>" --mode json\` on the best candidate articles
-4. Prefer \`maps/\` and \`concepts/\` for synthesis, and use \`sources/\` for evidence verification
-5. Only fall back to raw file tools if the query primitives are insufficient
+2. Read \`SCHEMA.md\` and \`_index/master.md\`
+3. Follow the index structure and article wikilinks to navigate to relevant \`maps/\`, \`concepts/\`, and \`sources/\`
+4. Use \`kb-agent evidence "<path>" --mode json\` on the selected article paths when helpful
+5. Prefer \`maps/\` and \`concepts/\` for synthesis, and use \`sources/\` for evidence verification
+6. If the index does not lead to enough relevant material, say that the current knowledge base does not contain enough information
+7. Do not compensate for a missing index path by scanning the whole library like a search engine
 
 Question: ${question}`;
 

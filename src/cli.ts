@@ -6,7 +6,6 @@
 import { Command } from 'commander';
 import { initCommand } from './commands/init.js';
 import { navCommand } from './commands/nav.js';
-import { lookupCommand } from './commands/lookup.js';
 import { evidenceCommand } from './commands/evidence.js';
 import { ingestCommand } from './commands/ingest.js';
 import { compileCommand } from './commands/compile.js';
@@ -50,14 +49,6 @@ function createProgram(): Command {
     .option('--mode <mode>', 'Output mode: text / json', 'text')
     .action(async (opts: GlobalOptions) => {
       await navCommand(opts);
-    });
-
-  program
-    .command('lookup <query>')
-    .description('Retrieve candidate wiki articles grouped by maps / concepts / sources')
-    .option('--mode <mode>', 'Output mode: text / json', 'text')
-    .action(async (query: string, opts: GlobalOptions) => {
-      await lookupCommand(query, opts);
     });
 
   program
