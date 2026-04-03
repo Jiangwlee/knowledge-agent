@@ -49,7 +49,7 @@ wiki/
 kb-agent <subcommand> [options]
 
 子命令: init | ingest | compile | lint | query | chat
-LLM 通用参数: --model <model>  --mode text|stream|json|interactive
+LLM 通用参数: --model <model>  --mode text|json
 ```
 
 ## Tech Stack
@@ -85,12 +85,16 @@ knowledge-agent/
 │   ├── pi.ts                 # Pi subprocess runner
 │   ├── presets.ts            # 子命令 preset 配置
 │   ├── commands/             # 子命令实现
-│   │   ├── init.ts
+│   │   ├── init.ts           # 初始化知识库目录
 │   │   ├── ingest.ts         # URL/文本导入 → markdown/ → quick compile
-│   │   └── compile.ts        # 快速编译 → sources/ + 索引更新
+│   │   ├── compile.ts        # 快速编译 + 深度编译（跨源综合）
+│   │   ├── query.ts          # 单次问答（Pi print mode）
+│   │   ├── chat.ts           # 交互式对话（Pi TUI，stdio inherit）
+│   │   └── lint.ts           # 健康检查（discover-and-fix）
 │   └── pipeline/             # 管线工具
+│       ├── atomic-write.ts   # 原子写入（temp+rename）
 │       ├── markdown.ts       # Markdown 文件管理（frontmatter、slugify）
-│       └── index-updater.ts  # _index/master.md 维护
+│       └── index-updater.ts  # _index/master.md 维护（结构化 parse→modify→serialize）
 ├── agents/librarian.md       # Pi agent prompt
 ├── skills/{ingest,compile,search,lint}/
 ├── tests/                    # vitest 测试
@@ -103,6 +107,18 @@ knowledge-agent/
 - [Design Doc](docs/brainstorming/specs/2026-04-03-knowledge-agent-design.md) — 完整设计文档（定位、数据架构、CLI、Agent/Skill、Roadmap）
 - [Karpathy LLM Wiki 工作流](docs/karpathy-llm-wiki-workflow.md) — 核心方法论参考
 - [Origin Idea](docs/origin-idea.md) — 项目初心（注：架构草图已被 design.md 取代）
+
+## Implementation Status
+
+Phase 1-5 全部完成。所有子命令已实现，92 个测试通过。
+
+| Phase | 内容 | 状态 |
+|---|---|---|
+| 1 | 骨架搭建（CLI、init、Pi 连接） | 完成 |
+| 2 | Ingest + 快速编译 | 完成 |
+| 3 | Query + Chat + agent+skill 重构 | 完成 |
+| 4 | 深度编译 + Lint（discover-and-fix） | 完成 |
+| 5 | 打磨（原子写入、超时、索引重写、边界） | 完成 |
 
 ## Reference Projects
 
