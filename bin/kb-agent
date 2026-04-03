@@ -1,7 +1,10 @@
-#!/usr/bin/env -S node --import tsx
-// kb-agent — CLI entry point
-// Delegates to src/cli.ts for all command routing
+#!/usr/bin/env bash
+# kb-agent — CLI entry point
+# Resolves symlinks to find the real package directory, then loads tsx from
+# the package's own node_modules (avoids CWD-relative resolution issues).
 
-import { main } from '../src/cli.ts';
-
-main();
+real_bin="$(readlink -f "${BASH_SOURCE[0]}")"
+pkg_dir="$(cd "$(dirname "$real_bin")/.." && pwd)"
+exec node \
+  --import "$pkg_dir/node_modules/tsx/dist/esm/index.mjs" \
+  "$pkg_dir/bin/run.ts" "$@"
